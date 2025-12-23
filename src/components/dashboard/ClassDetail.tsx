@@ -11,12 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addWeeks } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import SessionDetail from './SessionDetail';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableSessionCard } from './SortableSessionCard';
 
 interface Class {
   id: string;
@@ -317,6 +320,43 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     onClassUpdate?.();
   };
 
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = sessions.findIndex((s) => s.id === active.id);
+      const newIndex = sessions.findIndex((s) => s.id === over.id);
+      
+      const newSessions = arrayMove(sessions, oldIndex, newIndex);
+      
+      // Update local state immediately for better UX
+      setSessions(newSessions);
+      
+      // Update session_order in database
+      const updates = newSessions.map((session, index) => ({
+        id: session.id,
+        session_order: index + 1
+      }));
+      
+      for (const update of updates) {
+        await supabase
+          .from('sessions')
+          .update({ session_order: update.session_order })
+          .eq('id', update.id);
+      }
+      
+      toast.success('Đã sắp xếp lại thứ tự buổi học');
+    }
+  };
+
   if (selectedSession) {
     return (
       <SessionDetail
@@ -555,89 +595,31 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {sessions.map((session) => (
-            <Card 
-              key={session.id}
-              className="hover:shadow-md transition-shadow"
-            >
-              <CardHeader className="flex flex-row items-center gap-4">
-                <div 
-                  className="flex-1 cursor-pointer"
-                  onClick={() => setSelectedSession(session)}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Buổi {session.session_order}
-                    </span>
-                    {getSessionDate(session.session_order) && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <CalendarIcon className="h-3 w-3" />
-                        {format(getSessionDate(session.session_order)!, 'dd/MM/yyyy', { locale: vi })}
-                      </span>
-                    )}
-                    {session.is_active ? (
-                      <Badge className="bg-green-500">Đang mở</Badge>
-                    ) : (
-                      <Badge variant="secondary">Đã đóng</Badge>
-                    )}
-                    {session.submission_count !== undefined && session.submission_count > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        <FileText className="h-3 w-3 mr-1" />
-                        {session.submission_count} bài nộp
-                      </Badge>
-                    )}
-                  </div>
-                  <CardTitle className="text-lg mt-1">{session.title}</CardTitle>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={session.is_active}
-                      onCheckedChange={() => toggleSessionActive(session)}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {session.is_active ? 'Mở' : 'Đóng'}
-                    </span>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditSession(session);
-                    }}
-                    title="Chỉnh sửa buổi học"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      postponeSession(session);
-                    }}
-                    title="Hoãn buổi học - lùi lịch kết thúc 1 tuần"
-                  >
-                    <PauseCircle className="h-4 w-4 mr-1" />
-                    Hoãn
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSession(session.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sessions.map(s => s.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-3">
+              {sessions.map((session) => (
+                <SortableSessionCard
+                  key={session.id}
+                  session={session}
+                  sessionDate={getSessionDate(session.session_order)}
+                  onSelect={() => setSelectedSession(session)}
+                  onToggleActive={() => toggleSessionActive(session)}
+                  onEdit={() => openEditSession(session)}
+                  onPostpone={() => postponeSession(session)}
+                  onDelete={() => deleteSession(session.id)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Edit Session Dialog */}
