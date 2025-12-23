@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Plus, BookOpen, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, BookOpen, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -22,6 +22,8 @@ interface Class {
   schedule_info: string | null;
   start_date: string | null;
   end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
   created_at: string;
 }
 
@@ -38,6 +40,8 @@ export default function TeacherDashboard() {
   const [newSchedule, setNewSchedule] = useState('');
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchClasses = async () => {
@@ -70,6 +74,12 @@ export default function TeacherDashboard() {
       toast.error('Ngày bắt đầu phải trước ngày kết thúc');
       return;
     }
+
+    // Validate times
+    if (startTime && endTime && startTime >= endTime) {
+      toast.error('Giờ bắt đầu phải trước giờ kết thúc');
+      return;
+    }
     
     setIsCreating(true);
     
@@ -81,6 +91,8 @@ export default function TeacherDashboard() {
         schedule_info: newSchedule || null,
         start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
         end_date: endDate ? format(endDate, 'yyyy-MM-dd') : null,
+        start_time: startTime || null,
+        end_time: endTime || null,
         teacher_id: user.id
       });
     
@@ -92,11 +104,7 @@ export default function TeacherDashboard() {
       }
     } else {
       toast.success('Tạo lớp thành công!');
-      setNewClassName('');
-      setNewClassCode('');
-      setNewSchedule('');
-      setStartDate(undefined);
-      setEndDate(undefined);
+      resetForm();
       setIsCreateOpen(false);
       fetchClasses();
     }
@@ -104,9 +112,25 @@ export default function TeacherDashboard() {
     setIsCreating(false);
   };
 
+  const resetForm = () => {
+    setNewClassName('');
+    setNewClassCode('');
+    setNewSchedule('');
+    setStartDate(undefined);
+    setEndDate(undefined);
+    setStartTime('');
+    setEndTime('');
+  };
+
   const formatDateDisplay = (dateStr: string | null) => {
     if (!dateStr) return null;
     return format(new Date(dateStr), 'dd/MM/yyyy', { locale: vi });
+  };
+
+  const formatTimeDisplay = (timeStr: string | null) => {
+    if (!timeStr) return null;
+    // Time comes as "HH:MM:SS", we only need "HH:MM"
+    return timeStr.substring(0, 5);
   };
 
   if (selectedClass) {
@@ -126,7 +150,10 @@ export default function TeacherDashboard() {
           <p className="text-muted-foreground">Quản lý các lớp học và buổi học</p>
         </div>
         
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <Dialog open={isCreateOpen} onOpenChange={(open) => {
+          setIsCreateOpen(open);
+          if (!open) resetForm();
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -152,7 +179,7 @@ export default function TeacherDashboard() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="class-code">Mã lớp (Unique) *</Label>
+                <Label htmlFor="class-code">Mã lớp *</Label>
                 <Input
                   id="class-code"
                   placeholder="VD: JSI36"
@@ -220,11 +247,40 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start-time">Giờ bắt đầu</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="start-time"
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end-time">Giờ kết thúc</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="end-time"
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="schedule">Ca học (Tùy chọn)</Label>
+                <Label htmlFor="schedule">Ghi chú lịch học</Label>
                 <Input
                   id="schedule"
-                  placeholder="VD: 10-12h Chủ nhật"
+                  placeholder="VD: Mỗi Chủ nhật hàng tuần"
                   value={newSchedule}
                   onChange={(e) => setNewSchedule(e.target.value)}
                 />
@@ -296,8 +352,16 @@ export default function TeacherDashboard() {
                       </span>
                     </div>
                   )}
+                  {(cls.start_time || cls.end_time) && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        {formatTimeDisplay(cls.start_time) || '?'} - {formatTimeDisplay(cls.end_time) || '?'}
+                      </span>
+                    </div>
+                  )}
                   {cls.schedule_info && (
-                    <div>{cls.schedule_info}</div>
+                    <div className="text-xs">{cls.schedule_info}</div>
                   )}
                 </div>
               </CardContent>
