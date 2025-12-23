@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { GraduationCap, ArrowRight, ArrowLeft, CheckCircle } from 'lucide-react';
+import { GraduationCap, ArrowRight, ArrowLeft, CheckCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import SubmissionForm from '@/components/dashboard/SubmissionForm';
+import SessionContentView from '@/components/dashboard/SessionContentView';
 
 const guestSchema = z.object({
   classCode: z.string().trim().min(1, "Vui lòng nhập mã lớp").max(20),
@@ -30,11 +31,12 @@ interface Session {
 }
 
 export default function Guest() {
-  const [step, setStep] = useState<'enter-code' | 'select-session' | 'submit'>('enter-code');
+  const [step, setStep] = useState<'enter-code' | 'select-session' | 'submit' | 'view-content'>('enter-code');
   const [classCode, setClassCode] = useState('');
   const [guestName, setGuestName] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -136,6 +138,19 @@ export default function Guest() {
     );
   }
 
+  if (step === 'view-content' && viewingSession) {
+    return (
+      <SessionContentView
+        title={viewingSession.title}
+        sessionOrder={viewingSession.session_order}
+        content={viewingSession.content}
+        className={viewingSession.classes.name}
+        classCode={viewingSession.classes.code}
+        onBack={() => setStep('select-session')}
+      />
+    );
+  }
+
   if (step === 'submit' && selectedSession) {
     return (
       <div className="min-h-screen bg-background p-4">
@@ -187,7 +202,32 @@ export default function Guest() {
                       </CardTitle>
                       <CardDescription>{session.classes.name}</CardDescription>
                     </div>
-                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    {session.content && (
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingSession(session);
+                          setStep('view-content');
+                        }}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Xem bài giảng
+                      </Button>
+                    )}
+                    <Button
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectSession(session);
+                      }}
+                    >
+                      Nộp bài
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
                   </div>
                 </CardHeader>
               </Card>

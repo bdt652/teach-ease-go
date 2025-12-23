@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import SessionContentView from './SessionContentView';
 
 interface Session {
   id: string;
@@ -55,6 +56,7 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [teacherNote, setTeacherNote] = useState('');
   const [score, setScore] = useState('');
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
@@ -136,6 +138,19 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
     URL.revokeObjectURL(url);
   };
 
+  if (isPreviewMode) {
+    return (
+      <SessionContentView
+        title={session.title}
+        sessionOrder={session.session_order}
+        content={content}
+        className={classData.name}
+        classCode={classData.code}
+        onBack={() => setIsPreviewMode(false)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -187,7 +202,18 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
                 rows={15}
                 className="font-mono text-sm"
               />
-              <div className="flex justify-end">
+              <div className="p-4 bg-muted rounded-lg text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-2">Hướng dẫn chèn ảnh:</p>
+                <code className="block bg-background px-2 py-1 rounded mb-2">
+                  ![Mô tả ảnh](https://link-anh.com/image.png)
+                </code>
+                <p>Bạn có thể sử dụng link ảnh từ bất kỳ nguồn nào (Imgur, Google Drive, v.v.)</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsPreviewMode(true)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Xem trước
+                </Button>
                 <Button onClick={handleSaveContent} disabled={isSaving}>
                   <Save className="h-4 w-4 mr-2" />
                   {isSaving ? 'Đang lưu...' : 'Lưu nội dung'}
