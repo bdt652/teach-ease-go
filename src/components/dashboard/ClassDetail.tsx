@@ -12,7 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock, GripVertical } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock, GripVertical, UserMinus } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { format, addWeeks } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -45,6 +47,15 @@ interface Session {
   submission_type?: string;
   submission_instructions?: string;
   allowed_extensions?: string[];
+}
+
+interface EnrolledStudent {
+  id: string;
+  user_id: string;
+  enrolled_at: string;
+  profile: {
+    full_name: string | null;
+  } | null;
 }
 
 interface ClassDetailProps {
@@ -91,6 +102,11 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
   const [editAllowedExtensions, setEditAllowedExtensions] = useState('');
   const [isSavingSession, setIsSavingSession] = useState(false);
 
+  // Enrolled students
+  const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
+  const [isStudentsOpen, setIsStudentsOpen] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
   const fetchSessions = async () => {
     const { data, error } = await supabase
       .from('sessions')
@@ -111,9 +127,58 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     setLoading(false);
   };
 
+  const fetchEnrolledStudents = async () => {
+    setLoadingStudents(true);
+    const { data, error } = await supabase
+      .from('class_enrollments')
+      .select(`
+        id,
+        user_id,
+        enrolled_at,
+        profiles!class_enrollments_user_id_fkey(full_name)
+      `)
+      .eq('class_id', classData.id)
+      .order('enrolled_at', { ascending: false });
+    
+    if (error) {
+      toast.error('Không thể tải danh sách học sinh');
+    } else {
+      const students = (data || []).map((item: any) => ({
+        id: item.id,
+        user_id: item.user_id,
+        enrolled_at: item.enrolled_at,
+        profile: item.profiles
+      }));
+      setEnrolledStudents(students);
+    }
+    setLoadingStudents(false);
+  };
+
+  const handleRemoveStudent = async (enrollmentId: string, studentName: string) => {
+    if (!confirm(`Bạn có chắc muốn xóa "${studentName}" khỏi lớp?`)) return;
+    
+    const { error } = await supabase
+      .from('class_enrollments')
+      .delete()
+      .eq('id', enrollmentId);
+    
+    if (error) {
+      toast.error('Không thể xóa học sinh');
+    } else {
+      toast.success('Đã xóa học sinh khỏi lớp');
+      fetchEnrolledStudents();
+    }
+  };
+
   useEffect(() => {
     fetchSessions();
   }, [classData.id]);
+
+  useEffect(() => {
+    if (isStudentsOpen) {
+      fetchEnrolledStudents();
+    }
+  }, [isStudentsOpen]);
 
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -405,6 +470,66 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
         <Button variant="destructive" size="icon" onClick={handleDeleteClass} title="Xóa lớp học">
           <Trash2 className="h-4 w-4" />
         </Button>
+        
+        {/* View Enrolled Students Dialog */}
+        <Dialog open={isStudentsOpen} onOpenChange={setIsStudentsOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="icon" title="Xem danh sách học sinh">
+              <Users className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Danh sách học sinh</DialogTitle>
+              <DialogDescription>
+                {enrolledStudents.length} học sinh đã tham gia lớp {currentClass.name}
+              </DialogDescription>
+            </DialogHeader>
+            {loadingStudents ? (
+              <div className="py-8 text-center text-muted-foreground">Đang tải...</div>
+            ) : enrolledStudents.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                Chưa có học sinh nào tham gia lớp này
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Học sinh</TableHead>
+                      <TableHead>Ngày tham gia</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enrolledStudents.map((student) => (
+                      <TableRow key={student.id}>
+                        <TableCell className="font-medium">
+                          {student.profile?.full_name || 'Không tên'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {format(new Date(student.enrolled_at), 'dd/MM/yyyy HH:mm')}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveStudent(student.id, student.profile?.full_name || 'Học sinh')}
+                            title="Xóa khỏi lớp"
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </DialogContent>
+        </Dialog>
+        
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="icon">
