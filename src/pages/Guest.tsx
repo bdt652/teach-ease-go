@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GraduationCap, ArrowRight, ArrowLeft, CheckCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -45,6 +46,64 @@ export default function Guest() {
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [enrolledStudents, setEnrolledStudents] = useState<string[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [classId, setClassId] = useState<string | null>(null);
+
+  // Fetch enrolled students when class code changes
+  const fetchEnrolledStudents = async (code: string) => {
+    if (code.length < 2) {
+      setEnrolledStudents([]);
+      setClassId(null);
+      return;
+    }
+
+    setIsLoadingStudents(true);
+    
+    // First find the class
+    const { data: classData } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('code', code.toUpperCase())
+      .maybeSingle();
+    
+    if (!classData) {
+      setEnrolledStudents([]);
+      setClassId(null);
+      setIsLoadingStudents(false);
+      return;
+    }
+
+    setClassId(classData.id);
+
+    // Fetch enrolled students with their names
+    const { data: enrollments } = await supabase
+      .from('class_enrollments')
+      .select('profiles!class_enrollments_user_id_fkey(full_name)')
+      .eq('class_id', classData.id);
+    
+    if (enrollments) {
+      const names = enrollments
+        .filter((e: any) => e.profiles?.full_name)
+        .map((e: any) => e.profiles.full_name as string);
+      setEnrolledStudents(names);
+    }
+    
+    setIsLoadingStudents(false);
+  };
+
+  // Debounced fetch when class code changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (classCode.length >= 2) {
+        fetchEnrolledStudents(classCode);
+      } else {
+        setEnrolledStudents([]);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [classCode]);
 
   const handleEnterClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -290,8 +349,30 @@ export default function Guest() {
                   required
                 />
               </div>
+              {enrolledStudents.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Chọn từ danh sách lớp</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => setGuestName(value)}
+                  >
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Chọn tên của bạn..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background z-50">
+                      {enrolledStudents.map((name, index) => (
+                        <SelectItem key={index} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
-                <Label htmlFor="guest-name">Tên hiển thị</Label>
+                <Label htmlFor="guest-name">
+                  {enrolledStudents.length > 0 ? 'Hoặc nhập tên thủ công' : 'Tên hiển thị'}
+                </Label>
                 <Input
                   id="guest-name"
                   placeholder="VD: Nguyễn Văn A"
