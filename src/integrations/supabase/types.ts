@@ -19,10 +19,12 @@ export type Database = {
           code: string
           created_at: string | null
           end_date: string | null
+          end_time: string | null
           id: string
           name: string
           schedule_info: string | null
           start_date: string | null
+          start_time: string | null
           teacher_id: string
           updated_at: string | null
         }
@@ -30,10 +32,12 @@ export type Database = {
           code: string
           created_at?: string | null
           end_date?: string | null
+          end_time?: string | null
           id?: string
           name: string
           schedule_info?: string | null
           start_date?: string | null
+          start_time?: string | null
           teacher_id: string
           updated_at?: string | null
         }
@@ -41,10 +45,12 @@ export type Database = {
           code?: string
           created_at?: string | null
           end_date?: string | null
+          end_time?: string | null
           id?: string
           name?: string
           schedule_info?: string | null
           start_date?: string | null
+          start_time?: string | null
           teacher_id?: string
           updated_at?: string | null
         }
