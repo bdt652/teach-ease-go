@@ -63,6 +63,7 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [score, setScore] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
+  const [showOnlySuspicious, setShowOnlySuspicious] = useState(false);
 
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
@@ -386,23 +387,42 @@ function hello() {
                   Chưa có bài nộp nào
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Học sinh</TableHead>
-                      <TableHead>Học sinh</TableHead>
-                      <TableHead>Thiết bị</TableHead>
-                      <TableHead>Loại file</TableHead>
-                      <TableHead>Thời gian nộp</TableHead>
-                      <TableHead>Điểm</TableHead>
-                      <TableHead>Hành động</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {submissions.map((sub) => (
-                      <TableRow key={sub.id} className={isSuspicious(sub) ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
+                <div className="space-y-4">
+                  {suspiciousFingerprints.size > 0 && (
+                    <div className="flex items-center justify-between p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                        <span className="text-sm font-medium">
+                          Phát hiện {suspiciousFingerprints.size} thiết bị có nhiều tên khác nhau
+                        </span>
+                      </div>
+                      <Button
+                        variant={showOnlySuspicious ? "destructive" : "outline"}
+                        size="sm"
+                        onClick={() => setShowOnlySuspicious(!showOnlySuspicious)}
+                      >
+                        {showOnlySuspicious ? "Hiển thị tất cả" : "Chỉ xem nghi ngờ"}
+                      </Button>
+                    </div>
+                  )}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Học sinh</TableHead>
+                        <TableHead>Thiết bị</TableHead>
+                        <TableHead>Loại file</TableHead>
+                        <TableHead>Thời gian nộp</TableHead>
+                        <TableHead>Điểm</TableHead>
+                        <TableHead>Hành động</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {submissions
+                        .filter(sub => !showOnlySuspicious || isSuspicious(sub))
+                        .map((sub) => (
+                        <TableRow key={sub.id} className={isSuspicious(sub) ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
                             {isSuspicious(sub) && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -550,6 +570,7 @@ function hello() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
               )}
             </CardContent>
           </Card>
