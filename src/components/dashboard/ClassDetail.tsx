@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { format, addWeeks } from 'date-fns';
 import SessionDetail from './SessionDetail';
 
 interface Class {
@@ -18,6 +19,10 @@ interface Class {
   code: string;
   name: string;
   schedule_info: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
 }
 
 interface Session {
@@ -32,9 +37,10 @@ interface Session {
 interface ClassDetailProps {
   classData: Class;
   onBack: () => void;
+  onClassUpdate?: () => void;
 }
 
-export default function ClassDetail({ classData, onBack }: ClassDetailProps) {
+export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassDetailProps) {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +128,44 @@ export default function ClassDetail({ classData, onBack }: ClassDetailProps) {
       toast.success('Đã xóa buổi học');
       fetchSessions();
     }
+  };
+
+  const postponeSession = async (session: Session) => {
+    if (!confirm(`Hoãn "${session.title}"? Lịch kết thúc sẽ lùi 1 tuần và thêm 1 buổi học mới.`)) return;
+    
+    // Thêm 1 buổi học mới ở cuối
+    const nextOrder = sessions.length + 1;
+    const { error: sessionError } = await supabase
+      .from('sessions')
+      .insert({
+        class_id: classData.id,
+        title: `Buổi ${nextOrder}`,
+        session_order: nextOrder,
+        is_active: false
+      });
+    
+    if (sessionError) {
+      toast.error('Không thể thêm buổi học mới');
+      return;
+    }
+    
+    // Lùi ngày kết thúc 1 tuần
+    if (classData.end_date) {
+      const newEndDate = addWeeks(new Date(classData.end_date), 1);
+      const { error: classError } = await supabase
+        .from('classes')
+        .update({ end_date: format(newEndDate, 'yyyy-MM-dd') })
+        .eq('id', classData.id);
+      
+      if (classError) {
+        toast.error('Không thể cập nhật ngày kết thúc');
+        return;
+      }
+    }
+    
+    toast.success(`Đã hoãn buổi học. Thêm Buổi ${nextOrder} và lùi ngày kết thúc 1 tuần.`);
+    fetchSessions();
+    onClassUpdate?.();
   };
 
   if (selectedSession) {
@@ -244,7 +288,7 @@ export default function ClassDetail({ classData, onBack }: ClassDetailProps) {
                   </div>
                   <CardTitle className="text-lg mt-1">{session.title}</CardTitle>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={session.is_active}
@@ -254,6 +298,18 @@ export default function ClassDetail({ classData, onBack }: ClassDetailProps) {
                       {session.is_active ? 'Mở' : 'Đóng'}
                     </span>
                   </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      postponeSession(session);
+                    }}
+                    title="Hoãn buổi học - lùi lịch kết thúc 1 tuần"
+                  >
+                    <PauseCircle className="h-4 w-4 mr-1" />
+                    Hoãn
+                  </Button>
                   <Button 
                     variant="ghost" 
                     size="icon"

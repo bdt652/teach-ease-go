@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Plus, BookOpen, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, differenceInWeeks, addWeeks } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import ClassDetail from './ClassDetail';
@@ -83,7 +83,7 @@ export default function TeacherDashboard() {
     
     setIsCreating(true);
     
-    const { error } = await supabase
+    const { data: newClass, error } = await supabase
       .from('classes')
       .insert({
         name: newClassName,
@@ -94,7 +94,9 @@ export default function TeacherDashboard() {
         start_time: startTime || null,
         end_time: endTime || null,
         teacher_id: user.id
-      });
+      })
+      .select()
+      .single();
     
     if (error) {
       if (error.code === '23505') {
@@ -102,13 +104,43 @@ export default function TeacherDashboard() {
       } else {
         toast.error('Không thể tạo lớp: ' + error.message);
       }
+      setIsCreating(false);
+      return;
+    }
+
+    // Tự động tạo các buổi học nếu có ngày bắt đầu và kết thúc
+    if (startDate && endDate && newClass) {
+      const weeks = differenceInWeeks(endDate, startDate) + 1; // +1 để bao gồm tuần đầu
+      const sessionsToCreate = [];
+      
+      for (let i = 0; i < weeks; i++) {
+        const sessionDate = addWeeks(startDate, i);
+        sessionsToCreate.push({
+          class_id: newClass.id,
+          title: `Buổi ${i + 1}`,
+          session_order: i + 1,
+          is_active: i === 0 // Chỉ buổi đầu tiên active
+        });
+      }
+      
+      if (sessionsToCreate.length > 0) {
+        const { error: sessionError } = await supabase
+          .from('sessions')
+          .insert(sessionsToCreate);
+        
+        if (sessionError) {
+          toast.error('Tạo lớp thành công nhưng không thể tạo buổi học');
+        } else {
+          toast.success(`Tạo lớp thành công với ${sessionsToCreate.length} buổi học!`);
+        }
+      }
     } else {
       toast.success('Tạo lớp thành công!');
-      resetForm();
-      setIsCreateOpen(false);
-      fetchClasses();
     }
     
+    resetForm();
+    setIsCreateOpen(false);
+    fetchClasses();
     setIsCreating(false);
   };
 
@@ -137,7 +169,10 @@ export default function TeacherDashboard() {
     return (
       <ClassDetail 
         classData={selectedClass} 
-        onBack={() => setSelectedClass(null)} 
+        onBack={() => setSelectedClass(null)}
+        onClassUpdate={() => {
+          fetchClasses();
+        }}
       />
     );
   }
