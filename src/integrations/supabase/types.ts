@@ -14,12 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      class_enrollments: {
+        Row: {
+          class_id: string
+          enrolled_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          class_id: string
+          enrolled_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          class_id?: string
+          enrolled_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_enrollments_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       classes: {
         Row: {
           code: string
           created_at: string | null
           end_date: string | null
           end_time: string | null
+          guest_password: string | null
           id: string
           name: string
           schedule_info: string | null
@@ -33,6 +63,7 @@ export type Database = {
           created_at?: string | null
           end_date?: string | null
           end_time?: string | null
+          guest_password?: string | null
           id?: string
           name: string
           schedule_info?: string | null
@@ -46,6 +77,7 @@ export type Database = {
           created_at?: string | null
           end_date?: string | null
           end_time?: string | null
+          guest_password?: string | null
           id?: string
           name?: string
           schedule_info?: string | null
@@ -261,6 +293,10 @@ export type Database = {
         Returns: boolean
       }
       is_class_teacher: {
+        Args: { _class_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_enrolled_in_class: {
         Args: { _class_id: string; _user_id: string }
         Returns: boolean
       }
