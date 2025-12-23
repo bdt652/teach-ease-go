@@ -4,9 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BookOpen, Upload, CheckCircle } from 'lucide-react';
+import { BookOpen, Upload, CheckCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import SubmissionForm from './SubmissionForm';
+import SessionContentView from './SessionContentView';
 
 interface Session {
   id: string;
@@ -35,6 +36,7 @@ export default function StudentDashboard() {
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [viewingSession, setViewingSession] = useState<Session | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +79,19 @@ export default function StudentDashboard() {
   const getSubmission = (sessionId: string) => {
     return mySubmissions.find(s => s.session_id === sessionId);
   };
+
+  if (viewingSession) {
+    return (
+      <SessionContentView
+        title={viewingSession.title}
+        sessionOrder={viewingSession.session_order}
+        content={viewingSession.content}
+        className={viewingSession.classes.name}
+        classCode={viewingSession.classes.code}
+        onBack={() => setViewingSession(null)}
+      />
+    );
+  }
 
   if (selectedSession) {
     return (
@@ -173,14 +188,26 @@ export default function StudentDashboard() {
                     </div>
                   )}
                   
-                  <Button
-                    className="w-full"
-                    variant={submitted ? 'outline' : 'default'}
-                    onClick={() => setSelectedSession(session)}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    {submitted ? 'Nộp lại bài' : 'Nộp bài'}
-                  </Button>
+                  <div className="flex gap-2">
+                    {session.content && (
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setViewingSession(session)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Xem bài giảng
+                      </Button>
+                    )}
+                    <Button
+                      className="flex-1"
+                      variant={submitted ? 'outline' : 'default'}
+                      onClick={() => setSelectedSession(session)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {submitted ? 'Nộp lại bài' : 'Nộp bài'}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
