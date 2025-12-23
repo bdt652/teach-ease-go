@@ -40,17 +40,28 @@ Deno.serve(async (req) => {
       }
     )
 
+    // Check if user is admin or teacher
     const { data: isAdmin } = await supabaseAdmin.rpc('has_role', {
       _user_id: user.id,
       _role: 'admin'
     })
 
-    if (!isAdmin) {
-      throw new Error('Only admins can create users')
+    const { data: isTeacher } = await supabaseAdmin.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'teacher'
+    })
+
+    if (!isAdmin && !isTeacher) {
+      throw new Error('Only admins and teachers can create users')
     }
 
     // Parse request body
     const { email, password, fullName, role } = await req.json()
+
+    // Teachers can only create student accounts
+    if (!isAdmin && isTeacher && role && role !== 'student') {
+      throw new Error('Teachers can only create student accounts')
+    }
 
     if (!email || !password) {
       throw new Error('Email and password are required')
@@ -60,7 +71,7 @@ Deno.serve(async (req) => {
       throw new Error('Password must be at least 6 characters')
     }
 
-    console.log(`Admin ${user.email} creating user: ${email}`)
+    console.log(`User ${user.email} creating user: ${email}`)
 
     // Create user with admin client
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
