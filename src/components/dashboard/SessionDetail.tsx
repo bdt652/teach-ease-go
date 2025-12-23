@@ -259,7 +259,16 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
                         <p className="font-medium text-foreground">Trích dẫn & Code</p>
                         <div className="space-y-1">
                           <div><code className="bg-background px-1.5 py-0.5 rounded">&gt; Trích dẫn</code></div>
-                          <div><code className="bg-background px-1.5 py-0.5 rounded">```code block```</code></div>
+                          <div><code className="bg-background px-1.5 py-0.5 rounded">`code inline`</code></div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="font-medium text-foreground">Code Block (có highlight)</p>
+                        <div className="space-y-1">
+                          <div><code className="bg-background px-1.5 py-0.5 rounded">```javascript</code></div>
+                          <div><code className="bg-background px-1.5 py-0.5 rounded">```python</code></div>
+                          <div><code className="bg-background px-1.5 py-0.5 rounded">```html</code></div>
+                          <div><code className="bg-background px-1.5 py-0.5 rounded">```css</code></div>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -269,6 +278,16 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
                           <div><code className="bg-background px-1.5 py-0.5 rounded">| A | B |</code> <span className="text-muted-foreground">Bảng</span></div>
                         </div>
                       </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-border/50">
+                      <p className="font-medium text-foreground mb-2">Ví dụ code block:</p>
+                      <pre className="bg-background px-3 py-2 rounded text-xs overflow-x-auto">
+{`\`\`\`javascript
+function hello() {
+  console.log("Xin chào!");
+}
+\`\`\``}
+                      </pre>
                     </div>
                   </CollapsibleContent>
                 </div>
