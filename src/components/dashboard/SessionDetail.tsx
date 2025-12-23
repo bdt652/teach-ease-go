@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle, StickyNote, Plus, Pencil } from 'lucide-react';
+import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle, StickyNote, Plus, Pencil, Share2, Check, Copy } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -415,11 +415,25 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
             Buổi {session.session_order}: {session.title}
           </h2>
         </div>
-        {session.is_active ? (
-          <Badge className="bg-green-500">Đang mở nộp bài</Badge>
-        ) : (
-          <Badge variant="secondary">Đã đóng</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {session.is_active ? (
+            <Badge className="bg-green-500">Đang mở nộp bài</Badge>
+          ) : (
+            <Badge variant="secondary">Đã đóng</Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const shareUrl = `${window.location.origin}/share/${session.id}`;
+              navigator.clipboard.writeText(shareUrl);
+              toast.success('Đã sao chép link chia sẻ!');
+            }}
+          >
+            <Share2 className="h-4 w-4 mr-2" />
+            Chia sẻ
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="content">
