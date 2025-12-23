@@ -73,6 +73,12 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
   const [editEndTime, setEditEndTime] = useState(classData.end_time?.substring(0, 5) || '');
   const [isEditing, setIsEditing] = useState(false);
 
+  // Edit session form
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [editSessionTitle, setEditSessionTitle] = useState('');
+  const [editSessionContent, setEditSessionContent] = useState('');
+  const [isSavingSession, setIsSavingSession] = useState(false);
+
   const fetchSessions = async () => {
     const { data, error } = await supabase
       .from('sessions')
@@ -184,6 +190,37 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     } else {
       fetchSessions();
     }
+  };
+
+  const openEditSession = (session: Session) => {
+    setEditingSession(session);
+    setEditSessionTitle(session.title);
+    setEditSessionContent(session.content || '');
+  };
+
+  const handleEditSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+    
+    setIsSavingSession(true);
+    
+    const { error } = await supabase
+      .from('sessions')
+      .update({
+        title: editSessionTitle,
+        content: editSessionContent || null
+      })
+      .eq('id', editingSession.id);
+    
+    if (error) {
+      toast.error('Không thể cập nhật buổi học');
+    } else {
+      toast.success('Cập nhật buổi học thành công!');
+      setEditingSession(null);
+      fetchSessions();
+    }
+    
+    setIsSavingSession(false);
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -565,6 +602,17 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                   </div>
                   <Button 
                     variant="outline" 
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditSession(session);
+                    }}
+                    title="Chỉnh sửa buổi học"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -591,6 +639,47 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
           ))}
         </div>
       )}
+
+      {/* Edit Session Dialog */}
+      <Dialog open={!!editingSession} onOpenChange={(open) => !open && setEditingSession(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa buổi học</DialogTitle>
+            <DialogDescription>
+              {editingSession && `Buổi ${editingSession.session_order}`}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSession} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-session-title">Tiêu đề buổi học</Label>
+              <Input
+                id="edit-session-title"
+                value={editSessionTitle}
+                onChange={(e) => setEditSessionTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-session-content">Nội dung bài giảng</Label>
+              <Textarea
+                id="edit-session-content"
+                placeholder="Nhập nội dung bài giảng (Markdown được hỗ trợ)..."
+                value={editSessionContent}
+                onChange={(e) => setEditSessionContent(e.target.value)}
+                rows={10}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setEditingSession(null)}>
+                Hủy
+              </Button>
+              <Button type="submit" disabled={isSavingSession}>
+                {isSavingSession ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
