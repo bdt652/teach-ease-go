@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown } from 'lucide-react';
+import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
 import FileUploader from './FileUploader';
@@ -59,6 +59,7 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [teacherNote, setTeacherNote] = useState('');
   const [score, setScore] = useState('');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
 
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
@@ -110,9 +111,30 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
     } else {
       toast.success('Đã lưu đánh giá');
       fetchSubmissions();
+      setGradeDialogOpen(false);
       setSelectedSubmission(null);
       setTeacherNote('');
       setScore('');
+    }
+  };
+
+  const handleDeleteSubmission = async (submissionId: string, filePath: string) => {
+    if (!confirm('Bạn có chắc muốn xóa bài nộp này?')) return;
+    
+    // Delete file from storage
+    await supabase.storage.from('submissions').remove([filePath]);
+    
+    // Delete record from database
+    const { error } = await supabase
+      .from('submissions')
+      .delete()
+      .eq('id', submissionId);
+    
+    if (error) {
+      toast.error('Không thể xóa bài nộp');
+    } else {
+      toast.success('Đã xóa bài nộp');
+      fetchSubmissions();
     }
   };
 
@@ -348,7 +370,7 @@ function hello() {
                         </TableCell>
                         <TableCell>
                           {sub.score !== null ? (
-                            <Badge>{sub.score}</Badge>
+                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary text-primary-foreground">{sub.score}</span>
                           ) : (
                             <span className="text-muted-foreground">Chưa chấm</span>
                           )}
@@ -362,16 +384,18 @@ function hello() {
                             >
                               <Download className="h-4 w-4" />
                             </Button>
-                            <Dialog>
+                            <Dialog open={gradeDialogOpen && selectedSubmission?.id === sub.id} onOpenChange={(open) => {
+                              setGradeDialogOpen(open);
+                              if (open) {
+                                setSelectedSubmission(sub);
+                                setTeacherNote(sub.teacher_note || '');
+                                setScore(sub.score?.toString() || '');
+                              }
+                            }}>
                               <DialogTrigger asChild>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    setSelectedSubmission(sub);
-                                    setTeacherNote(sub.teacher_note || '');
-                                    setScore(sub.score?.toString() || '');
-                                  }}
                                 >
                                   <MessageSquare className="h-4 w-4" />
                                 </Button>
@@ -424,6 +448,14 @@ function hello() {
                                 </div>
                               </DialogContent>
                             </Dialog>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                              onClick={() => handleDeleteSubmission(sub.id, sub.file_path)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
