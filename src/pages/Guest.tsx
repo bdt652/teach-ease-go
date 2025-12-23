@@ -23,6 +23,9 @@ interface Session {
   session_order: number;
   is_active: boolean;
   class_id: string;
+  submission_type?: string;
+  submission_instructions?: string;
+  allowed_extensions?: string[];
   classes: {
     id: string;
     name: string;
