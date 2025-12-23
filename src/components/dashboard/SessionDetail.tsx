@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle, StickyNote, Plus, Pencil } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
@@ -90,6 +91,9 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
   const [newStudentName, setNewStudentName] = useState('');
 
+  // Enrolled students for suggestions
+  const [enrolledStudents, setEnrolledStudents] = useState<{ userId: string; fullName: string }[]>([]);
+
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
       .from('submissions')
@@ -116,10 +120,28 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
     setLoadingNotes(false);
   };
 
+  const fetchEnrolledStudents = async () => {
+    const { data, error } = await supabase
+      .from('class_enrollments')
+      .select('user_id, profiles!class_enrollments_user_id_fkey(full_name)')
+      .eq('class_id', classData.id);
+    
+    if (!error && data) {
+      const students = data
+        .filter((e: any) => e.profiles?.full_name)
+        .map((e: any) => ({
+          userId: e.user_id,
+          fullName: e.profiles.full_name
+        }));
+      setEnrolledStudents(students);
+    }
+  };
+
   useEffect(() => {
     fetchSubmissions();
     fetchStudentNotes();
-  }, [session.id]);
+    fetchEnrolledStudents();
+  }, [session.id, classData.id]);
 
   // Get unique students from submissions
   const getUniqueStudents = () => {
@@ -897,8 +919,30 @@ function hello() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {enrolledStudents.length > 0 && (
+              <div className="space-y-2">
+                <Label>Chọn từ danh sách lớp</Label>
+                <Select
+                  value=""
+                  onValueChange={(value) => setNewStudentName(value)}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Chọn học sinh đã đăng ký..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    {enrolledStudents.map((student) => (
+                      <SelectItem key={student.userId} value={student.fullName}>
+                        {student.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="student-name">Tên học sinh</Label>
+              <Label htmlFor="student-name">
+                {enrolledStudents.length > 0 ? 'Hoặc nhập tên thủ công' : 'Tên học sinh'}
+              </Label>
               <Input
                 id="student-name"
                 placeholder="Nhập tên học sinh..."
