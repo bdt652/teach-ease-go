@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LogOut, Plus, BookOpen, Users, GraduationCap } from 'lucide-react';
+import { LogOut, BookOpen, Users, GraduationCap, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import TeacherDashboard from '@/components/dashboard/TeacherDashboard';
 import StudentDashboard from '@/components/dashboard/StudentDashboard';
@@ -86,6 +86,12 @@ export default function Dashboard() {
               <div className="text-sm text-muted-foreground">
                 Vai trò: {roles.map(r => r === 'teacher' ? 'Giáo viên' : r === 'student' ? 'Học sinh' : 'Admin').join(', ')}
               </div>
+            )}
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
+                <Shield className="h-4 w-4 mr-2" />
+                Quản lý Users
+              </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
