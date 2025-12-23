@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Shield, UserPlus, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 type AppRole = 'admin' | 'teacher' | 'student';
@@ -36,6 +38,14 @@ export default function Admin() {
   const [selectedRole, setSelectedRole] = useState<AppRole>('student');
   const [isAddingRole, setIsAddingRole] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Create user form
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<AppRole | ''>('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   const isAdmin = hasRole('admin');
 
@@ -117,6 +127,55 @@ export default function Admin() {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newUserEmail || !newUserPassword) {
+      toast.error('Vui lòng nhập email và mật khẩu');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      toast.error('Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    setIsCreatingUser(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: newUserEmail,
+          password: newUserPassword,
+          fullName: newUserFullName,
+          role: newUserRole || undefined
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      toast.success(`Đã tạo tài khoản cho ${newUserEmail}`);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserFullName('');
+      setNewUserRole('');
+      setIsCreateUserOpen(false);
+      
+      // Refresh data
+      setTimeout(() => fetchData(), 1000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể tạo tài khoản');
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
   const getRoleBadgeVariant = (role: AppRole) => {
     switch (role) {
       case 'admin': return 'destructive';
@@ -146,14 +205,99 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold text-foreground">Quản lý User Roles</h1>
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <Shield className="h-6 w-6 text-primary" />
+              <h1 className="text-xl font-bold text-foreground">Quản lý Users</h1>
+            </div>
           </div>
+
+          <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Tạo tài khoản mới
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Tạo tài khoản mới</DialogTitle>
+                <DialogDescription>
+                  Tạo tài khoản cho giáo viên hoặc học sinh
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-email">Email *</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">Mật khẩu *</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder="Tối thiểu 6 ký tự"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-fullname">Họ và tên</Label>
+                  <Input
+                    id="new-fullname"
+                    type="text"
+                    placeholder="Nguyễn Văn A"
+                    value={newUserFullName}
+                    onChange={(e) => setNewUserFullName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-role">Vai trò (tùy chọn)</Label>
+                  <Select value={newUserRole} onValueChange={(v) => setNewUserRole(v as AppRole | '')}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Chọn vai trò" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="teacher">Giáo viên</SelectItem>
+                      <SelectItem value="student">Học sinh</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsCreateUserOpen(false)}>
+                    Hủy
+                  </Button>
+                  <Button type="submit" disabled={isCreatingUser}>
+                    {isCreatingUser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Đang tạo...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Tạo tài khoản
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
@@ -278,7 +422,7 @@ export default function Admin() {
             <CardTitle>Hướng dẫn</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p><Badge variant="destructive">Admin</Badge> - Có toàn quyền quản lý hệ thống và phân quyền users</p>
+            <p><Badge variant="destructive">Admin</Badge> - Có toàn quyền quản lý hệ thống và tạo tài khoản</p>
             <p><Badge>Giáo viên</Badge> - Có thể tạo lớp, quản lý buổi học, chấm điểm</p>
             <p><Badge variant="secondary">Học sinh</Badge> - Có thể xem buổi học và nộp bài</p>
             <p className="mt-4">Click vào badge role để xóa role đó.</p>
