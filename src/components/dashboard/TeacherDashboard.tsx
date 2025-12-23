@@ -24,6 +24,7 @@ interface Class {
   end_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  guest_password: string | null;
   created_at: string;
 }
 

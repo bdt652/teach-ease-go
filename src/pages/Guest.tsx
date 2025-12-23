@@ -13,7 +13,8 @@ import SessionContentView from '@/components/dashboard/SessionContentView';
 
 const guestSchema = z.object({
   classCode: z.string().trim().min(1, "Vui lòng nhập mã lớp").max(20),
-  guestName: z.string().trim().min(2, "Tên phải có ít nhất 2 ký tự").max(100)
+  guestName: z.string().trim().min(2, "Tên phải có ít nhất 2 ký tự").max(100),
+  password: z.string().optional()
 });
 
 interface Session {
@@ -37,6 +38,8 @@ export default function Guest() {
   const [step, setStep] = useState<'enter-code' | 'select-session' | 'submit' | 'view-content'>('enter-code');
   const [classCode, setClassCode] = useState('');
   const [guestName, setGuestName] = useState('');
+  const [guestPassword, setGuestPassword] = useState('');
+  const [requiresPassword, setRequiresPassword] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
@@ -46,7 +49,7 @@ export default function Guest() {
   const handleEnterClass = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const validation = guestSchema.safeParse({ classCode, guestName });
+    const validation = guestSchema.safeParse({ classCode, guestName, password: guestPassword });
     if (!validation.success) {
       toast.error(validation.error.errors[0].message);
       return;
@@ -54,10 +57,10 @@ export default function Guest() {
     
     setIsLoading(true);
     
-    // Find class and active sessions
+    // Find class and check password
     const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('id, name, code')
+      .select('id, name, code, guest_password')
       .eq('code', classCode.toUpperCase())
       .maybeSingle();
     
@@ -65,6 +68,21 @@ export default function Guest() {
       toast.error('Không tìm thấy lớp với mã này');
       setIsLoading(false);
       return;
+    }
+
+    // Check if class requires password
+    if (classData.guest_password) {
+      if (!guestPassword) {
+        setRequiresPassword(true);
+        toast.error('Lớp này yêu cầu mật khẩu');
+        setIsLoading(false);
+        return;
+      }
+      if (guestPassword !== classData.guest_password) {
+        toast.error('Mật khẩu không đúng');
+        setIsLoading(false);
+        return;
+      }
     }
     
     // Get active sessions for this class
@@ -282,6 +300,19 @@ export default function Guest() {
                   required
                 />
               </div>
+              {requiresPassword && (
+                <div className="space-y-2">
+                  <Label htmlFor="guest-password">Mật khẩu lớp</Label>
+                  <Input
+                    id="guest-password"
+                    type="password"
+                    placeholder="Nhập mật khẩu giáo viên đã cung cấp"
+                    value={guestPassword}
+                    onChange={(e) => setGuestPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? 'Đang kiểm tra...' : 'Tiếp tục'}
                 <ArrowRight className="h-4 w-4 ml-2" />

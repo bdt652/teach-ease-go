@@ -31,6 +31,7 @@ interface Class {
   end_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  guest_password?: string | null;
 }
 
 interface Session {
@@ -78,6 +79,7 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
   );
   const [editStartTime, setEditStartTime] = useState(classData.start_time?.substring(0, 5) || '');
   const [editEndTime, setEditEndTime] = useState(classData.end_time?.substring(0, 5) || '');
+  const [editGuestPassword, setEditGuestPassword] = useState(classData.guest_password || '');
   const [isEditing, setIsEditing] = useState(false);
 
   // Edit session form
@@ -167,7 +169,8 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
         start_date: editStartDate ? format(editStartDate, 'yyyy-MM-dd') : null,
         end_date: editEndDate ? format(editEndDate, 'yyyy-MM-dd') : null,
         start_time: editStartTime || null,
-        end_time: editEndTime || null
+        end_time: editEndTime || null,
+        guest_password: editGuestPassword || null
       })
       .eq('id', currentClass.id)
       .select()
@@ -527,6 +530,20 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                   value={editSchedule}
                   onChange={(e) => setEditSchedule(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-guest-password">Mật khẩu cho học sinh nộp bài (không cần tài khoản)</Label>
+                <Input
+                  id="edit-guest-password"
+                  type="text"
+                  placeholder="Để trống nếu không yêu cầu mật khẩu"
+                  value={editGuestPassword}
+                  onChange={(e) => setEditGuestPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mật khẩu này dành cho học sinh nộp bài qua trang Guest (không có tài khoản)
+                </p>
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
