@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Maximize2, Minimize2, ZoomIn, ZoomOut, ArrowLeft } from 'lucide-react';
+import { Maximize2, Minimize2, ZoomIn, ZoomOut, ArrowLeft, Copy, Check } from 'lucide-react';
 
 interface SessionContentViewProps {
   title: string;
@@ -25,6 +27,13 @@ export default function SessionContentView({
 }: SessionContentViewProps) {
   const [fontSize, setFontSize] = useState(24); // Large default for TV
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyCode = async (code: string) => {
+    await navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   const increaseFontSize = () => setFontSize((prev) => Math.min(prev + 4, 48));
   const decreaseFontSize = () => setFontSize((prev) => Math.max(prev - 4, 16));
@@ -151,25 +160,55 @@ export default function SessionContentView({
                       {children}
                     </p>
                   ),
-                  // Enhanced code blocks
+                  // Enhanced code blocks with syntax highlighting
                   code: ({ className, children, ...props }) => {
-                    const isInline = !className;
+                    const match = /language-(\w+)/.exec(className || '');
+                    const codeString = String(children).replace(/\n$/, '');
+                    const isInline = !className && !codeString.includes('\n');
+                    
                     if (isInline) {
                       return (
                         <code
-                          className="bg-muted px-2 py-1 rounded text-primary font-mono"
+                          className="bg-muted px-2 py-1 rounded text-primary font-mono text-[0.9em]"
                           {...props}
                         >
                           {children}
                         </code>
                       );
                     }
+                    
                     return (
-                      <pre className="bg-muted p-6 rounded-xl overflow-x-auto my-6">
-                        <code className="font-mono text-foreground" {...props}>
-                          {children}
-                        </code>
-                      </pre>
+                      <div className="relative group my-6">
+                        <button
+                          onClick={() => copyCode(codeString)}
+                          className="absolute right-3 top-3 p-2 rounded-md bg-background/50 hover:bg-background opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Copy code"
+                        >
+                          {copiedCode === codeString ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </button>
+                        <SyntaxHighlighter
+                          style={oneDark as { [key: string]: React.CSSProperties }}
+                          language={match ? match[1] : 'text'}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: '0.75rem',
+                            fontSize: '0.875em',
+                            padding: '1.5rem',
+                          }}
+                        >
+                          {codeString}
+                        </SyntaxHighlighter>
+                        {match && (
+                          <span className="absolute left-3 top-3 text-xs text-muted-foreground uppercase font-mono">
+                            {match[1]}
+                          </span>
+                        )}
+                      </div>
                     );
                   },
                   // Enhanced lists
