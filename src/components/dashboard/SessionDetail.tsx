@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle, StickyNote, Plus, Pencil } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
@@ -46,6 +47,17 @@ interface Submission {
   device_info: unknown;
 }
 
+interface StudentNote {
+  id: string;
+  session_id: string;
+  student_user_id: string | null;
+  student_guest_name: string | null;
+  note: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface SessionDetailProps {
   session: Session;
   classData: Class;
@@ -65,6 +77,14 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false);
   const [showOnlySuspicious, setShowOnlySuspicious] = useState(false);
 
+  // Student notes
+  const [studentNotes, setStudentNotes] = useState<StudentNote[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(true);
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<StudentNote | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<{ userId: string | null; guestName: string | null } | null>(null);
+
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
       .from('submissions')
@@ -78,9 +98,119 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
     setLoadingSubmissions(false);
   };
 
+  const fetchStudentNotes = async () => {
+    const { data, error } = await supabase
+      .from('student_notes')
+      .select('*')
+      .eq('session_id', session.id)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setStudentNotes(data);
+    }
+    setLoadingNotes(false);
+  };
+
   useEffect(() => {
     fetchSubmissions();
+    fetchStudentNotes();
   }, [session.id]);
+
+  // Get unique students from submissions
+  const getUniqueStudents = () => {
+    const students = new Map<string, { userId: string | null; guestName: string | null; name: string }>();
+    submissions.forEach(sub => {
+      const key = sub.user_id || sub.guest_name || 'unknown';
+      if (!students.has(key)) {
+        students.set(key, {
+          userId: sub.user_id,
+          guestName: sub.guest_name,
+          name: sub.guest_name || 'Học sinh đã đăng nhập'
+        });
+      }
+    });
+    return Array.from(students.values());
+  };
+
+  // Get notes for a specific student
+  const getNotesForStudent = (userId: string | null, guestName: string | null) => {
+    return studentNotes.filter(note => 
+      (userId && note.student_user_id === userId) ||
+      (guestName && note.student_guest_name === guestName)
+    );
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim() || !user) return;
+
+    if (editingNote) {
+      // Update existing note
+      const { error } = await supabase
+        .from('student_notes')
+        .update({ note: noteText })
+        .eq('id', editingNote.id);
+
+      if (error) {
+        toast.error('Không thể cập nhật ghi chú');
+      } else {
+        toast.success('Đã cập nhật ghi chú');
+        fetchStudentNotes();
+      }
+    } else if (selectedStudent) {
+      // Create new note
+      const { error } = await supabase
+        .from('student_notes')
+        .insert({
+          session_id: session.id,
+          student_user_id: selectedStudent.userId,
+          student_guest_name: selectedStudent.guestName,
+          note: noteText,
+          created_by: user.id
+        });
+
+      if (error) {
+        toast.error('Không thể thêm ghi chú');
+      } else {
+        toast.success('Đã thêm ghi chú');
+        fetchStudentNotes();
+      }
+    }
+
+    setNoteDialogOpen(false);
+    setEditingNote(null);
+    setSelectedStudent(null);
+    setNoteText('');
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!confirm('Bạn có chắc muốn xóa ghi chú này?')) return;
+
+    const { error } = await supabase
+      .from('student_notes')
+      .delete()
+      .eq('id', noteId);
+
+    if (error) {
+      toast.error('Không thể xóa ghi chú');
+    } else {
+      toast.success('Đã xóa ghi chú');
+      fetchStudentNotes();
+    }
+  };
+
+  const openAddNote = (student: { userId: string | null; guestName: string | null }) => {
+    setSelectedStudent(student);
+    setEditingNote(null);
+    setNoteText('');
+    setNoteDialogOpen(true);
+  };
+
+  const openEditNote = (note: StudentNote) => {
+    setEditingNote(note);
+    setSelectedStudent(null);
+    setNoteText(note.note);
+    setNoteDialogOpen(true);
+  };
 
   const handleSaveContent = async () => {
     setIsSaving(true);
@@ -248,6 +378,10 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
           <TabsTrigger value="submissions" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Bài nộp ({submissions.length})
+          </TabsTrigger>
+          <TabsTrigger value="notes" className="flex items-center gap-2">
+            <StickyNote className="h-4 w-4" />
+            Ghi chú ({studentNotes.length})
           </TabsTrigger>
         </TabsList>
 
@@ -575,7 +709,138 @@ function hello() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="notes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ghi chú học sinh</CardTitle>
+              <CardDescription>
+                Ghi chú quá trình học của từng học sinh trong buổi học này
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingNotes ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Đang tải...
+                </div>
+              ) : getUniqueStudents().length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Chưa có học sinh nào nộp bài để ghi chú
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {getUniqueStudents().map((student, idx) => {
+                    const notes = getNotesForStudent(student.userId, student.guestName);
+                    return (
+                      <Card key={idx} className="border">
+                        <CardHeader className="py-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base font-medium">{student.name}</CardTitle>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openAddNote({ userId: student.userId, guestName: student.guestName })}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Thêm ghi chú
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="py-2">
+                          {notes.length === 0 ? (
+                            <p className="text-sm text-muted-foreground italic">Chưa có ghi chú</p>
+                          ) : (
+                            <ScrollArea className="max-h-[200px]">
+                              <div className="space-y-2">
+                                {notes.map((note) => (
+                                  <div key={note.id} className="p-3 bg-muted rounded-lg">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-sm whitespace-pre-wrap flex-1">{note.note}</p>
+                                      <div className="flex gap-1 shrink-0">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-7 w-7"
+                                          onClick={() => openEditNote(note)}
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-7 w-7 text-destructive hover:text-destructive"
+                                          onClick={() => handleDeleteNote(note.id)}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                      {new Date(note.created_at).toLocaleString('vi-VN')}
+                                      {note.updated_at !== note.created_at && ' (đã sửa)'}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Student Note Dialog */}
+      <Dialog open={noteDialogOpen} onOpenChange={(open) => {
+        setNoteDialogOpen(open);
+        if (!open) {
+          setEditingNote(null);
+          setSelectedStudent(null);
+          setNoteText('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingNote ? 'Chỉnh sửa ghi chú' : 'Thêm ghi chú'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingNote 
+                ? `Ghi chú cho: ${editingNote.student_guest_name || 'Học sinh đã đăng nhập'}`
+                : selectedStudent 
+                  ? `Ghi chú cho: ${selectedStudent.guestName || 'Học sinh đã đăng nhập'}`
+                  : ''
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="note-text">Nội dung ghi chú</Label>
+              <Textarea
+                id="note-text"
+                placeholder="Nhập ghi chú về quá trình học của học sinh..."
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                rows={6}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setNoteDialogOpen(false)}>
+                Hủy
+              </Button>
+              <Button onClick={handleSaveNote} disabled={!noteText.trim()}>
+                <Save className="h-4 w-4 mr-2" />
+                {editingNote ? 'Cập nhật' : 'Lưu ghi chú'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
