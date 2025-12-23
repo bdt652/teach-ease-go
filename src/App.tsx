@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Guest from "./pages/Guest";
 import Admin from "./pages/Admin";
+import ShareSession from "./pages/ShareSession";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/guest" element={<Guest />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/share/:sessionId" element={<ShareSession />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
