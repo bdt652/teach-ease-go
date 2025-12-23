@@ -9,9 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, addWeeks } from 'date-fns';
+import { vi } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import SessionDetail from './SessionDetail';
 
 interface Class {
@@ -42,15 +46,31 @@ interface ClassDetailProps {
 
 export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassDetailProps) {
   const { user } = useAuth();
+  const [currentClass, setCurrentClass] = useState<Class>(classData);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   
   // Create session form
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [newSessionContent, setNewSessionContent] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+
+  // Edit class form
+  const [editName, setEditName] = useState(classData.name);
+  const [editCode, setEditCode] = useState(classData.code);
+  const [editSchedule, setEditSchedule] = useState(classData.schedule_info || '');
+  const [editStartDate, setEditStartDate] = useState<Date | undefined>(
+    classData.start_date ? new Date(classData.start_date) : undefined
+  );
+  const [editEndDate, setEditEndDate] = useState<Date | undefined>(
+    classData.end_date ? new Date(classData.end_date) : undefined
+  );
+  const [editStartTime, setEditStartTime] = useState(classData.start_time?.substring(0, 5) || '');
+  const [editEndTime, setEditEndTime] = useState(classData.end_time?.substring(0, 5) || '');
+  const [isEditing, setIsEditing] = useState(false);
 
   const fetchSessions = async () => {
     const { data, error } = await supabase
@@ -101,6 +121,52 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     setIsCreating(false);
   };
 
+  const handleEditClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editStartDate && editEndDate && editStartDate > editEndDate) {
+      toast.error('Ngày bắt đầu phải trước ngày kết thúc');
+      return;
+    }
+
+    if (editStartTime && editEndTime && editStartTime >= editEndTime) {
+      toast.error('Giờ bắt đầu phải trước giờ kết thúc');
+      return;
+    }
+    
+    setIsEditing(true);
+    
+    const { data, error } = await supabase
+      .from('classes')
+      .update({
+        name: editName,
+        code: editCode.toUpperCase(),
+        schedule_info: editSchedule || null,
+        start_date: editStartDate ? format(editStartDate, 'yyyy-MM-dd') : null,
+        end_date: editEndDate ? format(editEndDate, 'yyyy-MM-dd') : null,
+        start_time: editStartTime || null,
+        end_time: editEndTime || null
+      })
+      .eq('id', currentClass.id)
+      .select()
+      .single();
+    
+    if (error) {
+      if (error.code === '23505') {
+        toast.error('Mã lớp đã tồn tại');
+      } else {
+        toast.error('Không thể cập nhật: ' + error.message);
+      }
+    } else if (data) {
+      setCurrentClass(data);
+      toast.success('Cập nhật lớp học thành công!');
+      setIsEditOpen(false);
+      onClassUpdate?.();
+    }
+    
+    setIsEditing(false);
+  };
+
   const toggleSessionActive = async (session: Session) => {
     const { error } = await supabase
       .from('sessions')
@@ -138,7 +204,7 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     const { error: sessionError } = await supabase
       .from('sessions')
       .insert({
-        class_id: classData.id,
+        class_id: currentClass.id,
         title: `Buổi ${nextOrder}`,
         session_order: nextOrder,
         is_active: false
@@ -150,16 +216,21 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     }
     
     // Lùi ngày kết thúc 1 tuần
-    if (classData.end_date) {
-      const newEndDate = addWeeks(new Date(classData.end_date), 1);
-      const { error: classError } = await supabase
+    if (currentClass.end_date) {
+      const newEndDate = addWeeks(new Date(currentClass.end_date), 1);
+      const { data, error: classError } = await supabase
         .from('classes')
         .update({ end_date: format(newEndDate, 'yyyy-MM-dd') })
-        .eq('id', classData.id);
+        .eq('id', currentClass.id)
+        .select()
+        .single();
       
       if (classError) {
         toast.error('Không thể cập nhật ngày kết thúc');
         return;
+      }
+      if (data) {
+        setCurrentClass(data);
       }
     }
     
@@ -172,7 +243,7 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     return (
       <SessionDetail
         session={selectedSession}
-        classData={classData}
+        classData={currentClass}
         onBack={() => setSelectedSession(null)}
       />
     );
@@ -185,12 +256,150 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-foreground">{classData.name}</h2>
+          <h2 className="text-2xl font-bold text-foreground">{currentClass.name}</h2>
           <div className="flex items-center gap-2 text-muted-foreground">
-            <Badge variant="outline" className="font-mono">{classData.code}</Badge>
-            {classData.schedule_info && <span>• {classData.schedule_info}</span>}
+            <Badge variant="outline" className="font-mono">{currentClass.code}</Badge>
+            {currentClass.schedule_info && <span>• {currentClass.schedule_info}</span>}
           </div>
         </div>
+        
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="icon">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Chỉnh sửa lớp học</DialogTitle>
+              <DialogDescription>
+                Cập nhật thông tin lớp học
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditClass} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Tên môn học *</Label>
+                <Input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-code">Mã lớp *</Label>
+                <Input
+                  id="edit-code"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value.toUpperCase())}
+                  maxLength={20}
+                  required
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Ngày bắt đầu</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !editStartDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {editStartDate ? format(editStartDate, "dd/MM/yyyy") : "Chọn ngày"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={editStartDate}
+                        onSelect={setEditStartDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ngày kết thúc</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !editEndDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {editEndDate ? format(editEndDate, "dd/MM/yyyy") : "Chọn ngày"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={editEndDate}
+                        onSelect={setEditEndDate}
+                        disabled={(date) => editStartDate ? date < editStartDate : false}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-start-time">Giờ bắt đầu</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-start-time"
+                      type="time"
+                      value={editStartTime}
+                      onChange={(e) => setEditStartTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-end-time">Giờ kết thúc</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-end-time"
+                      type="time"
+                      value={editEndTime}
+                      onChange={(e) => setEditEndTime(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-schedule">Ghi chú lịch học</Label>
+                <Input
+                  id="edit-schedule"
+                  placeholder="VD: Mỗi Chủ nhật hàng tuần"
+                  value={editSchedule}
+                  onChange={(e) => setEditSchedule(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isEditing}>
+                  {isEditing ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
         
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
