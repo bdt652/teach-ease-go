@@ -215,20 +215,54 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
                 className="font-mono text-sm"
               />
               <div className="p-4 bg-muted rounded-lg text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-2">Cú pháp Markdown:</p>
-                <div className="grid md:grid-cols-2 gap-2 text-xs">
-                  <code className="bg-background px-2 py-1 rounded">![Mô tả](link-ảnh)</code>
-                  <span>Chèn ảnh</span>
-                  <code className="bg-background px-2 py-1 rounded">[Tên file](link-file)</code>
-                  <span>Chèn link tài liệu</span>
-                  <code className="bg-background px-2 py-1 rounded"># Tiêu đề lớn</code>
-                  <span>Heading 1</span>
-                  <code className="bg-background px-2 py-1 rounded">## Tiêu đề nhỏ</code>
-                  <span>Heading 2</span>
-                  <code className="bg-background px-2 py-1 rounded">**in đậm**</code>
-                  <span>Chữ đậm</span>
-                  <code className="bg-background px-2 py-1 rounded">- item</code>
-                  <span>Danh sách</span>
+                <p className="font-medium text-foreground mb-3">Cú pháp Markdown:</p>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 text-xs">
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Tiêu đề</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded"># Heading 1</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">## Heading 2</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">### Heading 3</code></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Định dạng chữ</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">**in đậm**</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">*in nghiêng*</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">~~gạch ngang~~</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">`code inline`</code></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Danh sách</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">- Mục không số</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">1. Mục có số</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">  - Mục con</code></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Media & Link</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">![alt](url-ảnh)</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">[text](url)</code></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Trích dẫn & Code</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">&gt; Trích dẫn</code></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">```code block```</code></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">Khác</p>
+                    <div className="space-y-1">
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">---</code> <span className="text-muted-foreground">Đường kẻ</span></div>
+                      <div><code className="bg-background px-1.5 py-0.5 rounded">| A | B |</code> <span className="text-muted-foreground">Bảng</span></div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end gap-2">
