@@ -85,6 +85,11 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
   const [noteText, setNoteText] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<{ userId: string | null; guestName: string | null } | null>(null);
 
+  // Edit student name
+  const [editNameDialogOpen, setEditNameDialogOpen] = useState(false);
+  const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
+  const [newStudentName, setNewStudentName] = useState('');
+
   const fetchSubmissions = async () => {
     const { data, error } = await supabase
       .from('submissions')
@@ -210,6 +215,32 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
     setSelectedStudent(null);
     setNoteText(note.note);
     setNoteDialogOpen(true);
+  };
+
+  const openEditStudentName = (submission: Submission) => {
+    setEditingSubmission(submission);
+    setNewStudentName(submission.guest_name || '');
+    setEditNameDialogOpen(true);
+  };
+
+  const handleSaveStudentName = async () => {
+    if (!editingSubmission || !newStudentName.trim()) return;
+
+    const { error } = await supabase
+      .from('submissions')
+      .update({ guest_name: newStudentName.trim() })
+      .eq('id', editingSubmission.id);
+
+    if (error) {
+      toast.error('Không thể cập nhật tên học sinh');
+    } else {
+      toast.success('Đã cập nhật tên học sinh');
+      fetchSubmissions();
+    }
+
+    setEditNameDialogOpen(false);
+    setEditingSubmission(null);
+    setNewStudentName('');
   };
 
   const handleSaveContent = async () => {
@@ -557,27 +588,35 @@ function hello() {
                         <TableRow key={sub.id} className={isSuspicious(sub) ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                            {isSuspicious(sub) && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-xs">
-                                  <div className="space-y-1 text-xs">
-                                    <p className="font-semibold text-destructive">Cảnh báo: Trùng thiết bị!</p>
-                                    <p>Các tên đã nộp từ thiết bị này:</p>
-                                    <ul className="list-disc pl-4">
-                                      {getSuspiciousNames(sub.device_fingerprint!).map((name, i) => (
-                                        <li key={i}>{name}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                            {getStudentName(sub)}
-                          </div>
-                        </TableCell>
+                              {isSuspicious(sub) && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="max-w-xs">
+                                    <div className="space-y-1 text-xs">
+                                      <p className="font-semibold text-destructive">Cảnh báo: Trùng thiết bị!</p>
+                                      <p>Các tên đã nộp từ thiết bị này:</p>
+                                      <ul className="list-disc pl-4">
+                                        {getSuspiciousNames(sub.device_fingerprint!).map((name, i) => (
+                                          <li key={i}>{name}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              <span>{getStudentName(sub)}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => openEditStudentName(sub)}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         <TableCell>
                           {sub.device_fingerprint ? (
                             <Tooltip>
@@ -836,6 +875,44 @@ function hello() {
               <Button onClick={handleSaveNote} disabled={!noteText.trim()}>
                 <Save className="h-4 w-4 mr-2" />
                 {editingNote ? 'Cập nhật' : 'Lưu ghi chú'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Student Name Dialog */}
+      <Dialog open={editNameDialogOpen} onOpenChange={(open) => {
+        setEditNameDialogOpen(open);
+        if (!open) {
+          setEditingSubmission(null);
+          setNewStudentName('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sửa tên học sinh</DialogTitle>
+            <DialogDescription>
+              Cập nhật tên học sinh để map với danh sách lớp
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="student-name">Tên học sinh</Label>
+              <Input
+                id="student-name"
+                placeholder="Nhập tên học sinh..."
+                value={newStudentName}
+                onChange={(e) => setNewStudentName(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditNameDialogOpen(false)}>
+                Hủy
+              </Button>
+              <Button onClick={handleSaveStudentName} disabled={!newStudentName.trim()}>
+                <Save className="h-4 w-4 mr-2" />
+                Lưu
               </Button>
             </div>
           </div>
