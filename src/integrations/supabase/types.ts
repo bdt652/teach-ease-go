@@ -18,27 +18,33 @@ export type Database = {
         Row: {
           code: string
           created_at: string | null
+          end_date: string | null
           id: string
           name: string
           schedule_info: string | null
+          start_date: string | null
           teacher_id: string
           updated_at: string | null
         }
         Insert: {
           code: string
           created_at?: string | null
+          end_date?: string | null
           id?: string
           name: string
           schedule_info?: string | null
+          start_date?: string | null
           teacher_id: string
           updated_at?: string | null
         }
         Update: {
           code?: string
           created_at?: string | null
+          end_date?: string | null
           id?: string
           name?: string
           schedule_info?: string | null
+          start_date?: string | null
           teacher_id?: string
           updated_at?: string | null
         }

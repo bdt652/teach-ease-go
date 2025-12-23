@@ -6,8 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, BookOpen, Users, Calendar, Settings } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Plus, BookOpen, Calendar as CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import ClassDetail from './ClassDetail';
 
 interface Class {
@@ -15,6 +20,8 @@ interface Class {
   code: string;
   name: string;
   schedule_info: string | null;
+  start_date: string | null;
+  end_date: string | null;
   created_at: string;
 }
 
@@ -29,6 +36,8 @@ export default function TeacherDashboard() {
   const [newClassName, setNewClassName] = useState('');
   const [newClassCode, setNewClassCode] = useState('');
   const [newSchedule, setNewSchedule] = useState('');
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchClasses = async () => {
@@ -56,6 +65,12 @@ export default function TeacherDashboard() {
     e.preventDefault();
     if (!user) return;
     
+    // Validate dates
+    if (startDate && endDate && startDate > endDate) {
+      toast.error('Ngày bắt đầu phải trước ngày kết thúc');
+      return;
+    }
+    
     setIsCreating(true);
     
     const { error } = await supabase
@@ -64,6 +79,8 @@ export default function TeacherDashboard() {
         name: newClassName,
         code: newClassCode.toUpperCase(),
         schedule_info: newSchedule || null,
+        start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
+        end_date: endDate ? format(endDate, 'yyyy-MM-dd') : null,
         teacher_id: user.id
       });
     
@@ -78,11 +95,18 @@ export default function TeacherDashboard() {
       setNewClassName('');
       setNewClassCode('');
       setNewSchedule('');
+      setStartDate(undefined);
+      setEndDate(undefined);
       setIsCreateOpen(false);
       fetchClasses();
     }
     
     setIsCreating(false);
+  };
+
+  const formatDateDisplay = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    return format(new Date(dateStr), 'dd/MM/yyyy', { locale: vi });
   };
 
   if (selectedClass) {
@@ -109,7 +133,7 @@ export default function TeacherDashboard() {
               Tạo lớp mới
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Tạo lớp học mới</DialogTitle>
               <DialogDescription>
@@ -118,7 +142,7 @@ export default function TeacherDashboard() {
             </DialogHeader>
             <form onSubmit={handleCreateClass} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="class-name">Tên môn học</Label>
+                <Label htmlFor="class-name">Tên môn học *</Label>
                 <Input
                   id="class-name"
                   placeholder="VD: Python Cơ bản"
@@ -128,7 +152,7 @@ export default function TeacherDashboard() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="class-code">Mã lớp (Unique)</Label>
+                <Label htmlFor="class-code">Mã lớp (Unique) *</Label>
                 <Input
                   id="class-code"
                   placeholder="VD: JSI36"
@@ -141,6 +165,61 @@ export default function TeacherDashboard() {
                   Học sinh sẽ dùng mã này để nộp bài
                 </p>
               </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Ngày bắt đầu</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !startDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {startDate ? format(startDate, "dd/MM/yyyy") : "Chọn ngày"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={setStartDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ngày kết thúc</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !endDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endDate ? format(endDate, "dd/MM/yyyy") : "Chọn ngày"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={setEndDate}
+                        disabled={(date) => startDate ? date < startDate : false}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="schedule">Ca học (Tùy chọn)</Label>
                 <Input
@@ -208,12 +287,17 @@ export default function TeacherDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  {cls.schedule_info && (
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  {(cls.start_date || cls.end_date) && (
                     <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      {cls.schedule_info}
+                      <CalendarIcon className="h-4 w-4" />
+                      <span>
+                        {formatDateDisplay(cls.start_date) || '?'} - {formatDateDisplay(cls.end_date) || '?'}
+                      </span>
                     </div>
+                  )}
+                  {cls.schedule_info && (
+                    <div>{cls.schedule_info}</div>
                   )}
                 </div>
               </CardContent>
