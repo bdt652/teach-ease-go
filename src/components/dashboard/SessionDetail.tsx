@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
 import FileUploader from './FileUploader';
@@ -41,6 +42,8 @@ interface Submission {
   ai_feedback: string | null;
   score: number | null;
   submitted_at: string;
+  device_fingerprint: string | null;
+  device_info: unknown;
 }
 
 interface SessionDetailProps {
@@ -350,6 +353,8 @@ function hello() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Học sinh</TableHead>
+                      <TableHead>Học sinh</TableHead>
+                      <TableHead>Thiết bị</TableHead>
                       <TableHead>Loại file</TableHead>
                       <TableHead>Thời gian nộp</TableHead>
                       <TableHead>Điểm</TableHead>
@@ -363,7 +368,33 @@ function hello() {
                           {getStudentName(sub)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{sub.file_type || 'N/A'}</Badge>
+                          {sub.device_fingerprint ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1 cursor-help">
+                                  <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-mono text-xs">{sub.device_fingerprint.substring(0, 8)}...</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-sm">
+                                <div className="space-y-1 text-xs">
+                                  <p><strong>ID:</strong> {sub.device_fingerprint}</p>
+                                  {sub.device_info && typeof sub.device_info === 'object' && (
+                                    <>
+                                      <p><strong>Platform:</strong> {(sub.device_info as Record<string, string>).platform}</p>
+                                      <p><strong>Screen:</strong> {(sub.device_info as Record<string, string>).screenResolution}</p>
+                                      <p><strong>Timezone:</strong> {(sub.device_info as Record<string, string>).timezone}</p>
+                                    </>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium">{sub.file_type || 'N/A'}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {new Date(sub.submitted_at).toLocaleString('vi-VN')}
