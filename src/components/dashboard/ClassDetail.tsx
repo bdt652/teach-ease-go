@@ -36,6 +36,7 @@ interface Session {
   session_order: number;
   is_active: boolean;
   created_at: string;
+  submission_count?: number;
 }
 
 interface ClassDetailProps {
@@ -75,14 +76,19 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
   const fetchSessions = async () => {
     const { data, error } = await supabase
       .from('sessions')
-      .select('*')
+      .select('*, submissions(count)')
       .eq('class_id', classData.id)
       .order('session_order', { ascending: true });
     
     if (error) {
       toast.error('Không thể tải danh sách buổi học');
     } else {
-      setSessions(data || []);
+      // Map submissions count
+      const sessionsWithCount = (data || []).map((s: any) => ({
+        ...s,
+        submission_count: s.submissions?.[0]?.count || 0
+      }));
+      setSessions(sessionsWithCount);
     }
     setLoading(false);
   };
@@ -196,6 +202,41 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     }
   };
 
+  const handleDeleteClass = async () => {
+    if (!confirm(`Bạn có chắc muốn xóa lớp "${currentClass.name}"? Tất cả buổi học và bài nộp sẽ bị xóa.`)) return;
+    
+    // Xóa tất cả sessions trước
+    const { error: sessionsError } = await supabase
+      .from('sessions')
+      .delete()
+      .eq('class_id', currentClass.id);
+    
+    if (sessionsError) {
+      toast.error('Không thể xóa các buổi học');
+      return;
+    }
+    
+    // Xóa lớp
+    const { error } = await supabase
+      .from('classes')
+      .delete()
+      .eq('id', currentClass.id);
+    
+    if (error) {
+      toast.error('Không thể xóa lớp học');
+    } else {
+      toast.success('Đã xóa lớp học');
+      onClassUpdate?.();
+      onBack();
+    }
+  };
+
+  const getSessionDate = (sessionOrder: number) => {
+    if (!currentClass.start_date) return null;
+    const startDate = new Date(currentClass.start_date);
+    return addWeeks(startDate, sessionOrder - 1);
+  };
+
   const postponeSession = async (session: Session) => {
     if (!confirm(`Hoãn "${session.title}"? Lịch kết thúc sẽ lùi 1 tuần và thêm 1 buổi học mới.`)) return;
     
@@ -263,6 +304,9 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
           </div>
         </div>
         
+        <Button variant="destructive" size="icon" onClick={handleDeleteClass} title="Xóa lớp học">
+          <Trash2 className="h-4 w-4" />
+        </Button>
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="icon">
@@ -485,14 +529,26 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                   className="flex-1 cursor-pointer"
                   onClick={() => setSelectedSession(session)}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-muted-foreground">
                       Buổi {session.session_order}
                     </span>
+                    {getSessionDate(session.session_order) && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CalendarIcon className="h-3 w-3" />
+                        {format(getSessionDate(session.session_order)!, 'dd/MM/yyyy', { locale: vi })}
+                      </span>
+                    )}
                     {session.is_active ? (
                       <Badge className="bg-green-500">Đang mở</Badge>
                     ) : (
                       <Badge variant="secondary">Đã đóng</Badge>
+                    )}
+                    {session.submission_count !== undefined && session.submission_count > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        <FileText className="h-3 w-3 mr-1" />
+                        {session.submission_count} bài nộp
+                      </Badge>
                     )}
                   </div>
                   <CardTitle className="text-lg mt-1">{session.title}</CardTitle>
