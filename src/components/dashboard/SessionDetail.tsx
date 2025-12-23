@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
+import FileUploader from './FileUploader';
 
 interface Session {
   id: string;
@@ -195,6 +196,17 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <FileUploader 
+                sessionId={session.id}
+                onFileUploaded={(file) => {
+                  // Auto-insert markdown at cursor or end
+                  const markdown = file.type === 'image' 
+                    ? `![${file.name}](${file.url})`
+                    : `[📎 ${file.name}](${file.url})`;
+                  setContent((prev) => prev + '\n\n' + markdown);
+                  toast.success('Đã thêm vào nội dung bài giảng');
+                }}
+              />
               <Textarea
                 placeholder="Nhập nội dung bài giảng (hỗ trợ Markdown)..."
                 value={content}
@@ -203,11 +215,21 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
                 className="font-mono text-sm"
               />
               <div className="p-4 bg-muted rounded-lg text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-2">Hướng dẫn chèn ảnh:</p>
-                <code className="block bg-background px-2 py-1 rounded mb-2">
-                  ![Mô tả ảnh](https://link-anh.com/image.png)
-                </code>
-                <p>Bạn có thể sử dụng link ảnh từ bất kỳ nguồn nào (Imgur, Google Drive, v.v.)</p>
+                <p className="font-medium text-foreground mb-2">Cú pháp Markdown:</p>
+                <div className="grid md:grid-cols-2 gap-2 text-xs">
+                  <code className="bg-background px-2 py-1 rounded">![Mô tả](link-ảnh)</code>
+                  <span>Chèn ảnh</span>
+                  <code className="bg-background px-2 py-1 rounded">[Tên file](link-file)</code>
+                  <span>Chèn link tài liệu</span>
+                  <code className="bg-background px-2 py-1 rounded"># Tiêu đề lớn</code>
+                  <span>Heading 1</span>
+                  <code className="bg-background px-2 py-1 rounded">## Tiêu đề nhỏ</code>
+                  <span>Heading 2</span>
+                  <code className="bg-background px-2 py-1 rounded">**in đậm**</code>
+                  <span>Chữ đậm</span>
+                  <code className="bg-background px-2 py-1 rounded">- item</code>
+                  <span>Danh sách</span>
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setIsPreviewMode(true)}>
