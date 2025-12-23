@@ -82,32 +82,41 @@ export type Database = {
       }
       sessions: {
         Row: {
+          allowed_extensions: string[] | null
           class_id: string
           content: string | null
           created_at: string | null
           id: string
           is_active: boolean | null
           session_order: number
+          submission_instructions: string | null
+          submission_type: string | null
           title: string
           updated_at: string | null
         }
         Insert: {
+          allowed_extensions?: string[] | null
           class_id: string
           content?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
           session_order?: number
+          submission_instructions?: string | null
+          submission_type?: string | null
           title: string
           updated_at?: string | null
         }
         Update: {
+          allowed_extensions?: string[] | null
           class_id?: string
           content?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
           session_order?: number
+          submission_instructions?: string | null
+          submission_type?: string | null
           title?: string
           updated_at?: string | null
         }

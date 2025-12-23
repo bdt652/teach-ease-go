@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -40,6 +41,9 @@ interface Session {
   is_active: boolean;
   created_at: string;
   submission_count?: number;
+  submission_type?: string;
+  submission_instructions?: string;
+  allowed_extensions?: string[];
 }
 
 interface ClassDetailProps {
@@ -80,6 +84,9 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [editSessionTitle, setEditSessionTitle] = useState('');
   const [editSessionContent, setEditSessionContent] = useState('');
+  const [editSubmissionType, setEditSubmissionType] = useState('any');
+  const [editSubmissionInstructions, setEditSubmissionInstructions] = useState('');
+  const [editAllowedExtensions, setEditAllowedExtensions] = useState('');
   const [isSavingSession, setIsSavingSession] = useState(false);
 
   const fetchSessions = async () => {
@@ -199,6 +206,9 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     setEditingSession(session);
     setEditSessionTitle(session.title);
     setEditSessionContent(session.content || '');
+    setEditSubmissionType(session.submission_type || 'any');
+    setEditSubmissionInstructions(session.submission_instructions || '');
+    setEditAllowedExtensions(session.allowed_extensions?.join(', ') || '');
   };
 
   const handleEditSession = async (e: React.FormEvent) => {
@@ -207,11 +217,19 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     
     setIsSavingSession(true);
     
+    const extensions = editAllowedExtensions
+      .split(',')
+      .map(ext => ext.trim().toLowerCase())
+      .filter(ext => ext.length > 0);
+    
     const { error } = await supabase
       .from('sessions')
       .update({
         title: editSessionTitle,
-        content: editSessionContent || null
+        content: editSessionContent || null,
+        submission_type: editSubmissionType,
+        submission_instructions: editSubmissionInstructions || null,
+        allowed_extensions: extensions.length > 0 ? extensions : null
       })
       .eq('id', editingSession.id);
     
@@ -648,9 +666,63 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                 placeholder="Nhập nội dung bài giảng (Markdown được hỗ trợ)..."
                 value={editSessionContent}
                 onChange={(e) => setEditSessionContent(e.target.value)}
-                rows={10}
+                rows={6}
               />
             </div>
+            
+            {/* Submission Configuration */}
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium text-foreground">Cấu hình nộp bài</h4>
+              
+              <div className="space-y-2">
+                <Label htmlFor="submission-type">Loại bài nộp yêu cầu</Label>
+                <Select value={editSubmissionType} onValueChange={setEditSubmissionType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại nộp bài" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Tất cả định dạng</SelectItem>
+                    <SelectItem value="image">Chỉ ảnh (screenshot, hình)</SelectItem>
+                    <SelectItem value="code">Chỉ code (text)</SelectItem>
+                    <SelectItem value="document">Chỉ tài liệu (zip, pdf...)</SelectItem>
+                    <SelectItem value="link">Chỉ link (GitHub, CodePen...)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {editSubmissionType !== 'any' && editSubmissionType !== 'link' && (
+                <div className="space-y-2">
+                  <Label htmlFor="allowed-extensions">
+                    Định dạng file cho phép (cách nhau bởi dấu phẩy)
+                  </Label>
+                  <Input
+                    id="allowed-extensions"
+                    placeholder={
+                      editSubmissionType === 'image' ? 'jpg, png, gif' :
+                      editSubmissionType === 'code' ? 'py, js, html, css' :
+                      'zip, pdf, docx'
+                    }
+                    value={editAllowedExtensions}
+                    onChange={(e) => setEditAllowedExtensions(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Ví dụ: jpg, png, gif (để trống = cho phép tất cả)
+                  </p>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="submission-instructions">Hướng dẫn nộp bài</Label>
+                <Textarea
+                  id="submission-instructions"
+                  placeholder="Ví dụ: Chụp ảnh màn hình kết quả code và nộp lên..."
+                  value={editSubmissionInstructions}
+                  onChange={(e) => setEditSubmissionInstructions(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+            
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" onClick={() => setEditingSession(null)}>
                 Hủy

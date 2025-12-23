@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Upload, FileCode, Link, Loader2 } from 'lucide-react';
+import { ArrowLeft, Upload, FileCode, Link, Loader2, Image, FileArchive, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 
 interface Session {
@@ -19,6 +20,9 @@ interface Session {
     name: string;
     code: string;
   };
+  submission_type?: string;
+  submission_instructions?: string;
+  allowed_extensions?: string[];
 }
 
 interface SubmissionFormProps {
@@ -38,13 +42,50 @@ export default function SubmissionForm({
 }: SubmissionFormProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionType, setSubmissionType] = useState<'file' | 'code' | 'link'>('file');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Determine initial submission type based on session config
+  const getInitialType = (): 'file' | 'code' | 'link' => {
+    const type = session.submission_type;
+    if (type === 'link') return 'link';
+    if (type === 'code') return 'code';
+    return 'file';
+  };
+  
+  const [submissionType, setSubmissionType] = useState<'file' | 'code' | 'link'>(getInitialType());
   
   // Form states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [codeContent, setCodeContent] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+
+  // Check if type is allowed based on session config
+  const isTypeAllowed = (type: 'file' | 'code' | 'link'): boolean => {
+    const configType = session.submission_type;
+    if (!configType || configType === 'any') return true;
+    if (configType === 'link' && type === 'link') return true;
+    if (configType === 'code' && type === 'code') return true;
+    if ((configType === 'image' || configType === 'document') && type === 'file') return true;
+    return false;
+  };
+
+  const getAcceptedFileTypes = (): string => {
+    const configType = session.submission_type;
+    const extensions = session.allowed_extensions;
+    
+    if (extensions && extensions.length > 0) {
+      return extensions.map(ext => `.${ext}`).join(',');
+    }
+    
+    if (configType === 'image') {
+      return '.jpg,.jpeg,.png,.gif,.webp,.bmp';
+    }
+    if (configType === 'document') {
+      return '.zip,.rar,.7z,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx';
+    }
+    
+    return '.zip,.rar,.7z,.py,.js,.ts,.cpp,.c,.java,.html,.css,.txt,.jpg,.jpeg,.png,.gif,.pdf';
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,6 +95,17 @@ export default function SubmissionForm({
         toast.error('File quá lớn. Tối đa 100MB');
         return;
       }
+      
+      // Check file extension if configured
+      const extensions = session.allowed_extensions;
+      if (extensions && extensions.length > 0) {
+        const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+        if (!extensions.includes(fileExt)) {
+          toast.error(`Chỉ chấp nhận file: ${extensions.join(', ')}`);
+          return;
+        }
+      }
+      
       setSelectedFile(file);
     }
   };
@@ -180,23 +232,68 @@ export default function SubmissionForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Chọn định dạng nộp bài</CardTitle>
-          <CardDescription>
-            Bạn có thể nộp file, code text, hoặc link sản phẩm
-          </CardDescription>
+          <CardTitle>Nộp bài</CardTitle>
+          {session.submission_instructions && (
+            <Alert className="mt-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Hướng dẫn từ giáo viên:</strong> {session.submission_instructions}
+              </AlertDescription>
+            </Alert>
+          )}
+          {session.submission_type && session.submission_type !== 'any' && (
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="secondary">
+                {session.submission_type === 'image' && 'Chỉ nộp ảnh'}
+                {session.submission_type === 'code' && 'Chỉ nộp code'}
+                {session.submission_type === 'document' && 'Chỉ nộp tài liệu'}
+                {session.submission_type === 'link' && 'Chỉ nộp link'}
+              </Badge>
+              {session.allowed_extensions && session.allowed_extensions.length > 0 && (
+                <Badge variant="outline">
+                  Định dạng: {session.allowed_extensions.join(', ')}
+                </Badge>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          <Tabs value={submissionType} onValueChange={(v) => setSubmissionType(v as typeof submissionType)}>
+          <Tabs value={submissionType} onValueChange={(v) => {
+            if (isTypeAllowed(v as typeof submissionType)) {
+              setSubmissionType(v as typeof submissionType);
+            } else {
+              toast.error('Loại nộp bài này không được phép cho buổi học này');
+            }
+          }}>
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="file" className="flex items-center gap-2">
-                <Upload className="h-4 w-4" />
-                File
+              <TabsTrigger 
+                value="file" 
+                className="flex items-center gap-2"
+                disabled={!isTypeAllowed('file')}
+              >
+                {session.submission_type === 'image' ? (
+                  <Image className="h-4 w-4" />
+                ) : session.submission_type === 'document' ? (
+                  <FileArchive className="h-4 w-4" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {session.submission_type === 'image' ? 'Ảnh' : 
+                 session.submission_type === 'document' ? 'Tài liệu' : 'File'}
               </TabsTrigger>
-              <TabsTrigger value="code" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="code" 
+                className="flex items-center gap-2"
+                disabled={!isTypeAllowed('code')}
+              >
                 <FileCode className="h-4 w-4" />
                 Code
               </TabsTrigger>
-              <TabsTrigger value="link" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="link" 
+                className="flex items-center gap-2"
+                disabled={!isTypeAllowed('link')}
+              >
                 <Link className="h-4 w-4" />
                 Link
               </TabsTrigger>
@@ -204,12 +301,16 @@ export default function SubmissionForm({
 
             <TabsContent value="file" className="space-y-4">
               <div className="space-y-2">
-                <Label>Chọn file (zip, rar, code files...)</Label>
+                <Label>
+                  {session.submission_type === 'image' ? 'Chọn ảnh' :
+                   session.submission_type === 'document' ? 'Chọn tài liệu' : 
+                   'Chọn file'}
+                </Label>
                 <Input
                   ref={fileInputRef}
                   type="file"
                   onChange={handleFileChange}
-                  accept=".zip,.rar,.7z,.py,.js,.ts,.cpp,.c,.java,.html,.css,.txt"
+                  accept={getAcceptedFileTypes()}
                 />
                 {selectedFile && (
                   <p className="text-sm text-muted-foreground">
@@ -217,7 +318,13 @@ export default function SubmissionForm({
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Hỗ trợ: .zip, .rar, .7z, .py, .js, .ts, .cpp, .c, .java, .html, .css, .txt (Tối đa 100MB)
+                  {session.allowed_extensions && session.allowed_extensions.length > 0 
+                    ? `Định dạng cho phép: ${session.allowed_extensions.join(', ')} (Tối đa 100MB)`
+                    : session.submission_type === 'image'
+                    ? 'Hỗ trợ: .jpg, .png, .gif, .webp (Tối đa 100MB)'
+                    : session.submission_type === 'document'
+                    ? 'Hỗ trợ: .zip, .rar, .pdf, .docx (Tối đa 100MB)'
+                    : 'Hỗ trợ: .zip, .rar, .7z, .py, .js, .ts, .cpp, .c, .java, .html, .css, .txt (Tối đa 100MB)'}
                 </p>
               </div>
             </TabsContent>
