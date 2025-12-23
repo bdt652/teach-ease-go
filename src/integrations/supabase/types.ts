@@ -175,6 +175,8 @@ export type Database = {
         Row: {
           ai_feedback: string | null
           code_snippet: string | null
+          device_fingerprint: string | null
+          device_info: Json | null
           file_path: string
           file_type: string | null
           guest_name: string | null
@@ -188,6 +190,8 @@ export type Database = {
         Insert: {
           ai_feedback?: string | null
           code_snippet?: string | null
+          device_fingerprint?: string | null
+          device_info?: Json | null
           file_path: string
           file_type?: string | null
           guest_name?: string | null
@@ -201,6 +205,8 @@ export type Database = {
         Update: {
           ai_feedback?: string | null
           code_snippet?: string | null
+          device_fingerprint?: string | null
+          device_info?: Json | null
           file_path?: string
           file_type?: string | null
           guest_name?: string | null

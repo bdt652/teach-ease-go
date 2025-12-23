@@ -1,6 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -58,6 +60,32 @@ export default function SubmissionForm({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [codeContent, setCodeContent] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string>('');
+  const [deviceInfo, setDeviceInfo] = useState<Record<string, unknown>>({});
+
+  // Initialize fingerprint on mount
+  useEffect(() => {
+    const getFingerprint = async () => {
+      try {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        setDeviceFingerprint(result.visitorId);
+        setDeviceInfo({
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          screenResolution: `${screen.width}x${screen.height}`,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          colorDepth: screen.colorDepth,
+          hardwareConcurrency: navigator.hardwareConcurrency,
+          deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 'unknown',
+        });
+      } catch (error) {
+        console.error('Error getting fingerprint:', error);
+      }
+    };
+    getFingerprint();
+  }, []);
 
   // Check if type is allowed based on session config
   const isTypeAllowed = (type: 'file' | 'code' | 'link'): boolean => {
@@ -165,29 +193,20 @@ export default function SubmissionForm({
       }
 
       // Create submission record
-      const submissionData: {
-        session_id: string;
-        file_path: string;
-        file_type: string;
-        code_snippet: string | null;
-        user_id?: string;
-        guest_name?: string;
-      } = {
+      const submissionData = {
         session_id: session.id,
         file_path: filePath,
         file_type: fileType,
         code_snippet: codeSnippet || null,
+        device_fingerprint: deviceFingerprint || null,
+        device_info: (Object.keys(deviceInfo).length > 0 ? deviceInfo : null) as Json,
+        user_id: isGuest ? undefined : user?.id,
+        guest_name: isGuest ? guestName : undefined,
       };
-
-      if (isGuest) {
-        submissionData.guest_name = guestName;
-      } else {
-        submissionData.user_id = user?.id;
-      }
 
       const { error: insertError } = await supabase
         .from('submissions')
-        .insert(submissionData);
+        .insert([submissionData]);
 
       if (insertError) {
         throw new Error('Không thể lưu bài nộp: ' + insertError.message);
