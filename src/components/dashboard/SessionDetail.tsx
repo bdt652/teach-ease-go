@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint } from 'lucide-react';
+import { ArrowLeft, FileText, Users, Download, Save, Eye, MessageSquare, ChevronDown, Trash2, Fingerprint, AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
@@ -143,6 +143,43 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
 
   const getStudentName = (sub: Submission) => {
     return sub.guest_name || 'Học sinh đã đăng nhập';
+  };
+
+  // Detect suspicious submissions: same fingerprint with different names
+  const getSuspiciousFingerprints = () => {
+    const fingerprintMap = new Map<string, Set<string>>();
+    
+    submissions.forEach(sub => {
+      if (sub.device_fingerprint) {
+        const name = getStudentName(sub);
+        if (!fingerprintMap.has(sub.device_fingerprint)) {
+          fingerprintMap.set(sub.device_fingerprint, new Set());
+        }
+        fingerprintMap.get(sub.device_fingerprint)!.add(name);
+      }
+    });
+    
+    // Return fingerprints that have multiple different names
+    const suspicious = new Set<string>();
+    fingerprintMap.forEach((names, fingerprint) => {
+      if (names.size > 1) {
+        suspicious.add(fingerprint);
+      }
+    });
+    
+    return suspicious;
+  };
+
+  const suspiciousFingerprints = getSuspiciousFingerprints();
+  
+  const isSuspicious = (sub: Submission) => {
+    return sub.device_fingerprint && suspiciousFingerprints.has(sub.device_fingerprint);
+  };
+
+  const getSuspiciousNames = (fingerprint: string) => {
+    return submissions
+      .filter(s => s.device_fingerprint === fingerprint)
+      .map(s => getStudentName(s));
   };
 
   const downloadFile = async (filePath: string) => {
@@ -363,16 +400,36 @@ function hello() {
                   </TableHeader>
                   <TableBody>
                     {submissions.map((sub) => (
-                      <TableRow key={sub.id}>
+                      <TableRow key={sub.id} className={isSuspicious(sub) ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
                         <TableCell className="font-medium">
-                          {getStudentName(sub)}
+                          <div className="flex items-center gap-2">
+                            {isSuspicious(sub) && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-1 text-xs">
+                                    <p className="font-semibold text-destructive">Cảnh báo: Trùng thiết bị!</p>
+                                    <p>Các tên đã nộp từ thiết bị này:</p>
+                                    <ul className="list-disc pl-4">
+                                      {getSuspiciousNames(sub.device_fingerprint!).map((name, i) => (
+                                        <li key={i}>{name}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            {getStudentName(sub)}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {sub.device_fingerprint ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                                <div className={`flex items-center gap-1 cursor-help ${isSuspicious(sub) ? 'text-destructive' : ''}`}>
+                                  <Fingerprint className={`h-4 w-4 ${isSuspicious(sub) ? 'text-destructive' : 'text-muted-foreground'}`} />
                                   <span className="font-mono text-xs">{sub.device_fingerprint.substring(0, 8)}...</span>
                                 </div>
                               </TooltipTrigger>
