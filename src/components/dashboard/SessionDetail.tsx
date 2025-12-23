@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -421,18 +422,51 @@ export default function SessionDetail({ session, classData, onBack }: SessionDet
           ) : (
             <Badge variant="secondary">Đã đóng</Badge>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const shareUrl = `${window.location.origin}/share/${session.id}`;
-              navigator.clipboard.writeText(shareUrl);
-              toast.success('Đã sao chép link chia sẻ!');
-            }}
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Chia sẻ
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Share2 className="h-4 w-4 mr-2" />
+                Chia sẻ
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Chia sẻ buổi học</DialogTitle>
+                <DialogDescription>
+                  Gửi link hoặc mã QR cho phụ huynh để xem nội dung buổi học
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col items-center gap-6 py-4">
+                <div className="p-4 bg-background border rounded-xl">
+                  <QRCodeSVG
+                    value={`${window.location.origin}/share/${session.id}`}
+                    size={200}
+                    level="H"
+                    includeMargin
+                  />
+                </div>
+                <div className="w-full space-y-2">
+                  <Label>Link chia sẻ</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`${window.location.origin}/share/${session.id}`}
+                      className="text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/share/${session.id}`);
+                        toast.success('Đã sao chép link!');
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
