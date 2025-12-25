@@ -11,10 +11,10 @@ const CONFIG = {
   
   // Thông tin lớp học
   CLASS_INFO: {
-    subject: "Game Maker Basic",
-    ageRange: "9-13 tuổi",
-    teacherPronoun: "thầy",
-    studentPronoun: "bạn",
+    className: "Game Maker Basic", // Tên lớp học
+    ageRange: "9-13 tuổi",         // Độ tuổi học sinh
+    teacherPronoun: "thầy",        // Cách xưng hô của giáo viên
+    studentPronoun: "bạn",         // Cách gọi học sinh
   },
 };
 
@@ -57,7 +57,7 @@ QUY TẮC BẮT BUỘC:
 - Kết quả phải copy-paste trực tiếp vào Zalo được`,
 
   // Prompt cho nhận xét từng học sinh
-  individualSystem: `Bạn là ${CONFIG.CLASS_INFO.teacherPronoun} giáo dạy ${CONFIG.CLASS_INFO.subject} cho học sinh ${CONFIG.CLASS_INFO.ageRange}. Xưng hô "${CONFIG.CLASS_INFO.studentPronoun} - ${CONFIG.CLASS_INFO.teacherPronoun}".
+  individualSystem: `Bạn là ${CONFIG.CLASS_INFO.teacherPronoun} giáo dạy ${CONFIG.CLASS_INFO.className} cho học sinh ${CONFIG.CLASS_INFO.ageRange}. Xưng hô "${CONFIG.CLASS_INFO.studentPronoun} - ${CONFIG.CLASS_INFO.teacherPronoun}".
 Viết nhận xét theo format CHÍNH XÁC sau (plain text, dễ copy vào Zalo):
 
 [Tên học sinh]
