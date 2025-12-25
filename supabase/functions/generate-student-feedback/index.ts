@@ -1,107 +1,61 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ============================================
-// CẤU HÌNH - SỬA Ở ĐÂY
+// CẤU HÌNH MẶC ĐỊNH - Sẽ bị ghi đè bởi database
 // ============================================
 
-const CONFIG = {
-  // API Configuration - Đổi API key name và URL ở đây
-  API_KEY_NAME: "GEMINI_API_KEY", // Tên secret trong Supabase
-  API_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-  
-  // Thông tin lớp học
-  CLASS_INFO: {
-    className: "Game Maker Basic", // Tên lớp học
-    ageRange: "9-13 tuổi",         // Độ tuổi học sinh
-    teacherPronoun: "thầy",        // Cách xưng hô của giáo viên
-    studentPronoun: "bạn",         // Cách gọi học sinh
-  },
+const DEFAULT_CONFIG = {
+  class_name: "Game Maker Basic",
+  age_range: "9-13 tuổi",
+  teacher_pronoun: "thầy",
+  student_pronoun: "bạn",
+  batch_prompt: `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh qua Zalo.`,
+  individual_prompt: `Bạn là {teacher_pronoun} giáo dạy {class_name} cho học sinh {age_range}.`,
 };
-
-// ============================================
-// PROMPT TEMPLATES - SỬA NỘI DUNG PROMPT Ở ĐÂY
-// ============================================
-
-const PROMPTS = {
-  // Prompt cho nhận xét hàng loạt (batch)
-  batchSystem: `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh qua Zalo.
-Hãy viết nhận xét theo format CHÍNH XÁC như sau (plain text, không dùng markdown):
-
-[Tiêu đề buổi học]
-
-Nội dung buổi học:
-+ [Nội dung 1]
-+ [Nội dung 2]
-+ ...
-
-Bài tập về nhà:
-[Bài tập về nhà]
-
-Nhận xét:
-
-[Tên học sinh 1]
-[Một đoạn văn 40-55 từ bao gồm: điểm đã làm được, chưa làm được, điểm cần cải thiện, và sự tiến bộ qua các buổi]
-
-[Tên học sinh 2]
-[Một đoạn văn 40-55 từ bao gồm: điểm đã làm được, chưa làm được, điểm cần cải thiện, và sự tiến bộ qua các buổi]
-
-...
-
-QUY TẮC BẮT BUỘC:
-- KHÔNG dùng markdown (không #, ##, **, -, *)
-- Dùng dấu + cho bullet points
-- Mỗi học sinh viết ĐÚNG 1 đoạn văn liền mạch 40-55 từ
-- Đoạn văn PHẢI bao gồm đủ 4 ý: đã làm được, chưa làm được, cần cải thiện, sự tiến bộ
-- Viết tiếng Việt thân thiện, chuyên nghiệp
-- Nếu học sinh nghỉ, ghi "[Tên] - Nghỉ học buổi này."
-- Kết quả phải copy-paste trực tiếp vào Zalo được`,
-
-  // Prompt cho nhận xét từng học sinh
-  individualSystem: `Bạn là ${CONFIG.CLASS_INFO.teacherPronoun} giáo dạy ${CONFIG.CLASS_INFO.className} cho học sinh ${CONFIG.CLASS_INFO.ageRange}. Xưng hô "${CONFIG.CLASS_INFO.studentPronoun} - ${CONFIG.CLASS_INFO.teacherPronoun}".
-Viết nhận xét theo format CHÍNH XÁC sau (plain text, dễ copy vào Zalo):
-
-[Tên học sinh]
-
-Tự học: [25-50 từ nhận xét về khả năng tự học, tự tìm hiểu]
-
-Học tại lớp: [25-50 từ nhận xét về thái độ, tập trung trong giờ học]
-
-Giao tiếp: [25-50 từ nhận xét về khả năng trao đổi, hỏi đáp với thầy và bạn]
-
-Giải quyết vấn đề: [25-50 từ nhận xét về cách xử lý lỗi, debug, tìm giải pháp]
-
-Máy tính: [25-50 từ nhận xét về kỹ năng sử dụng máy tính cơ bản]
-
-Tư duy máy tính: [25-50 từ nhận xét về logic, thuật toán, hiểu code]
-
-Sáng tạo: [25-50 từ nhận xét về ý tưởng, thiết kế game riêng]
-
-Trên lớp: [25-50 từ nhận xét về hoàn thành bài tập trên lớp]
-
-Ở nhà: [25-50 từ nhận xét về làm bài tập về nhà]
-
-Đánh giá chung: [25-50 từ tổng kết sự tiến bộ và định hướng cải thiện]
-
-QUY TẮC:
-- Văn phong thân thiện, dễ hiểu với lứa tuổi tiểu học/THCS
-- Mỗi tiêu chí gợi ý điểm mạnh và góp ý nhẹ nhàng nếu cần
-- KHÔNG dùng markdown, chỉ plain text
-- Dựa vào dữ liệu thực tế từ ghi chú các buổi và bài nộp
-- Nếu thiếu thông tin tiêu chí nào, viết nhận xét trung lập và khuyến khích`,
-};
-
-// ============================================
-// CODE CHÍNH - KHÔNG CẦN SỬA PHẦN NÀY
-// ============================================
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Lấy config từ database
+async function getConfig(): Promise<Record<string, string>> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const { data, error } = await supabase
+    .from("feedback_config")
+    .select("config_key, config_value");
+
+  if (error) {
+    console.error("Error fetching config:", error);
+    return DEFAULT_CONFIG;
+  }
+
+  const config: Record<string, string> = { ...DEFAULT_CONFIG };
+  for (const row of data || []) {
+    config[row.config_key] = row.config_value;
+  }
+
+  return config;
+}
+
+// Thay thế placeholder trong prompt
+function replacePlaceholders(template: string, config: Record<string, string>): string {
+  return template
+    .replace(/{class_name}/g, config.class_name)
+    .replace(/{age_range}/g, config.age_range)
+    .replace(/{teacher_pronoun}/g, config.teacher_pronoun)
+    .replace(/{student_pronoun}/g, config.student_pronoun);
+}
+
 // Hàm gọi Gemini API
 async function callGeminiAPI(systemPrompt: string, userPrompt: string, apiKey: string) {
-  const response = await fetch(`${CONFIG.API_URL}?key=${apiKey}`, {
+  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  
+  const response = await fetch(`${API_URL}?key=${apiKey}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -181,19 +135,23 @@ serve(async (req) => {
   try {
     const { type, studentName, sessionTitle, sessionContent, previousNotes, submissions, students, homework } = await req.json();
     
-    const apiKey = Deno.env.get(CONFIG.API_KEY_NAME);
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
-      throw new Error(`${CONFIG.API_KEY_NAME} is not configured`);
+      throw new Error("GEMINI_API_KEY is not configured");
     }
+
+    // Lấy config từ database
+    const config = await getConfig();
+    console.log('Loaded config from database');
 
     let systemPrompt: string;
     let userPrompt: string;
 
     if (type === 'batch') {
-      systemPrompt = PROMPTS.batchSystem;
+      systemPrompt = config.batch_prompt;
       userPrompt = buildBatchUserPrompt(sessionTitle, sessionContent, homework, students);
     } else {
-      systemPrompt = PROMPTS.individualSystem;
+      systemPrompt = replacePlaceholders(config.individual_prompt, config);
       userPrompt = buildIndividualUserPrompt(studentName, sessionTitle, sessionContent, submissions, previousNotes);
     }
 
