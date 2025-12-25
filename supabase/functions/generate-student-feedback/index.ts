@@ -22,37 +22,42 @@ serve(async (req) => {
     let userPrompt: string;
 
     if (type === 'batch') {
-      // Batch feedback for all students
-      systemPrompt = `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh.
-Hãy viết nhận xét theo format CHÍNH XÁC như sau:
+      // Batch feedback for all students - format for Zalo copy-paste
+      systemPrompt = `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh qua Zalo.
+Hãy viết nhận xét theo format CHÍNH XÁC như sau (plain text, không dùng markdown):
 
-# [Tiêu đề buổi học]
+[Tiêu đề buổi học]
 
-## Nội dung buổi học:
-[Tóm tắt nội dung buổi học thành các bullet points ngắn gọn]
+Nội dung buổi học:
++ [Nội dung 1]
++ [Nội dung 2]
++ ...
 
-## Bài tập về nhà:
-[Bài tập về nhà nếu có, hoặc ghi "Không có bài tập về nhà"]
+Bài tập về nhà:
+[Bài tập về nhà]
 
-## Nhận xét từng học sinh:
+Nhận xét:
 
-### [Tên học sinh 1]
-[Nhận xét ngắn gọn 2-3 câu về điểm mạnh, điểm cần cải thiện]
+[Tên học sinh 1]
+[Một đoạn văn 40-55 từ bao gồm: điểm đã làm được, chưa làm được, điểm cần cải thiện, và sự tiến bộ qua các buổi]
 
-### [Tên học sinh 2]
-[Nhận xét ngắn gọn 2-3 câu]
+[Tên học sinh 2]
+[Một đoạn văn 40-55 từ bao gồm: điểm đã làm được, chưa làm được, điểm cần cải thiện, và sự tiến bộ qua các buổi]
 
 ...
 
-Lưu ý:
-- Viết bằng tiếng Việt, giọng văn thân thiện nhưng chuyên nghiệp
-- Nhận xét cụ thể cho từng học sinh dựa trên thông tin bài nộp
-- Nếu học sinh nghỉ, ghi "Nghỉ học buổi này"
-- Mỗi nhận xét học sinh chỉ 2-3 câu, súc tích`;
+QUY TẮC BẮT BUỘC:
+- KHÔNG dùng markdown (không #, ##, **, -, *)
+- Dùng dấu + cho bullet points
+- Mỗi học sinh viết ĐÚNG 1 đoạn văn liền mạch 40-55 từ
+- Đoạn văn PHẢI bao gồm đủ 4 ý: đã làm được, chưa làm được, cần cải thiện, sự tiến bộ
+- Viết tiếng Việt thân thiện, chuyên nghiệp
+- Nếu học sinh nghỉ, ghi "[Tên] - Nghỉ học buổi này."
+- Kết quả phải copy-paste trực tiếp vào Zalo được`;
 
       const studentList = students.map((s: any) => {
         const subInfo = s.submissions?.length > 0 
-          ? `Đã nộp ${s.submissions.length} bài, điểm: ${s.submissions.map((sub: any) => sub.score || 'chưa chấm').join(', ')}`
+          ? `Đã nộp ${s.submissions.length} bài, điểm: ${s.submissions.map((sub: any) => sub.score || 'chưa chấm').join(', ')}, ghi chú GV: ${s.submissions.map((sub: any) => sub.teacher_note || '').filter(Boolean).join('; ') || 'không có'}`
           : 'Chưa nộp bài';
         return `- ${s.name}: ${subInfo}`;
       }).join('\n');
@@ -65,10 +70,10 @@ ${sessionContent || 'Không có nội dung chi tiết'}
 Bài tập về nhà:
 ${homework || 'Chưa có thông tin bài tập'}
 
-Danh sách học sinh:
+Danh sách học sinh và thông tin bài nộp:
 ${studentList}
 
-Hãy viết nhận xét chung cho buổi học này.`;
+Hãy viết nhận xét chung cho buổi học này theo đúng format yêu cầu.`;
 
     } else {
       // Individual feedback for one student
