@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
 import FileUploader from './FileUploader';
+import StudentNoteCard from './StudentNoteCard';
 
 interface Session {
   id: string;
@@ -824,7 +825,7 @@ function hello() {
             <CardHeader>
               <CardTitle>Ghi chú học sinh</CardTitle>
               <CardDescription>
-                Ghi chú quá trình học của từng học sinh trong buổi học này
+                Ghi chú quá trình học của từng học sinh. Sử dụng "Nhận xét AI" để tự động tạo nhận xét chi tiết cho phụ huynh.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -832,71 +833,68 @@ function hello() {
                 <div className="text-center py-8 text-muted-foreground">
                   Đang tải...
                 </div>
-              ) : getUniqueStudents().length === 0 ? (
+              ) : getUniqueStudents().length === 0 && enrolledStudents.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  Chưa có học sinh nào nộp bài để ghi chú
+                  Chưa có học sinh nào trong lớp
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {getUniqueStudents().map((student, idx) => {
-                    const notes = getNotesForStudent(student.userId, student.guestName);
+                  {/* Show enrolled students first */}
+                  {enrolledStudents.map((student, idx) => {
+                    const notes = getNotesForStudent(student.userId, null);
+                    const studentSubmissions = submissions.filter(s => s.user_id === student.userId);
                     return (
-                      <Card key={idx} className="border">
-                        <CardHeader className="py-3">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-base font-medium">{student.name}</CardTitle>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openAddNote({ userId: student.userId, guestName: student.guestName })}
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Thêm ghi chú
-                            </Button>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="py-2">
-                          {notes.length === 0 ? (
-                            <p className="text-sm text-muted-foreground italic">Chưa có ghi chú</p>
-                          ) : (
-                            <ScrollArea className="max-h-[200px]">
-                              <div className="space-y-2">
-                                {notes.map((note) => (
-                                  <div key={note.id} className="p-3 bg-muted rounded-lg">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <p className="text-sm whitespace-pre-wrap flex-1">{note.note}</p>
-                                      <div className="flex gap-1 shrink-0">
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-7 w-7"
-                                          onClick={() => openEditNote(note)}
-                                        >
-                                          <Pencil className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          className="h-7 w-7 text-destructive hover:text-destructive"
-                                          onClick={() => handleDeleteNote(note.id)}
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                      {new Date(note.created_at).toLocaleString('vi-VN')}
-                                      {note.updated_at !== note.created_at && ' (đã sửa)'}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </ScrollArea>
-                          )}
-                        </CardContent>
-                      </Card>
+                      <StudentNoteCard
+                        key={`enrolled-${idx}`}
+                        student={{
+                          userId: student.userId,
+                          guestName: null,
+                          name: student.fullName
+                        }}
+                        notes={notes.map(n => ({ ...n, session_id: session.id }))}
+                        sessionId={session.id}
+                        sessionTitle={`Buổi ${session.session_order} - ${session.title}`}
+                        sessionContent={content}
+                        submissions={studentSubmissions.map(s => ({
+                          id: s.id,
+                          score: s.score,
+                          teacher_note: s.teacher_note
+                        }))}
+                        onAddNote={() => openAddNote({ userId: student.userId, guestName: null })}
+                        onEditNote={openEditNote}
+                        onDeleteNote={handleDeleteNote}
+                        onNoteGenerated={fetchStudentNotes}
+                      />
                     );
                   })}
+                  {/* Show guest students who submitted but not enrolled */}
+                  {getUniqueStudents()
+                    .filter(s => s.guestName && !enrolledStudents.some(e => e.fullName === s.guestName))
+                    .map((student, idx) => {
+                      const notes = getNotesForStudent(student.userId, student.guestName);
+                      const studentSubmissions = submissions.filter(s => 
+                        s.guest_name === student.guestName || s.user_id === student.userId
+                      );
+                      return (
+                        <StudentNoteCard
+                          key={`guest-${idx}`}
+                          student={student}
+                          notes={notes.map(n => ({ ...n, session_id: session.id }))}
+                          sessionId={session.id}
+                          sessionTitle={`Buổi ${session.session_order} - ${session.title}`}
+                          sessionContent={content}
+                          submissions={studentSubmissions.map(s => ({
+                            id: s.id,
+                            score: s.score,
+                            teacher_note: s.teacher_note
+                          }))}
+                          onAddNote={() => openAddNote({ userId: student.userId, guestName: student.guestName })}
+                          onEditNote={openEditNote}
+                          onDeleteNote={handleDeleteNote}
+                          onNoteGenerated={fetchStudentNotes}
+                        />
+                      );
+                    })}
                 </div>
               )}
             </CardContent>
