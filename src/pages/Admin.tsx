@@ -11,10 +11,19 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X, Settings, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 type AppRole = 'admin' | 'teacher' | 'student';
+
+interface FeedbackConfig {
+  id: string;
+  config_key: string;
+  config_value: string;
+  description: string | null;
+}
 
 interface Profile {
   id: string;
@@ -64,6 +73,11 @@ export default function Admin() {
   const [importProgress, setImportProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Feedback config
+  const [feedbackConfigs, setFeedbackConfigs] = useState<FeedbackConfig[]>([]);
+  const [editingConfig, setEditingConfig] = useState<FeedbackConfig | null>(null);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
   const isAdmin = hasRole('admin');
   const isTeacher = hasRole('teacher');
   const canAccess = isAdmin || isTeacher;
@@ -78,9 +92,10 @@ export default function Admin() {
   }, [user, loading, canAccess, navigate]);
 
   const fetchData = async () => {
-    const [profilesRes, rolesRes] = await Promise.all([
+    const [profilesRes, rolesRes, configsRes] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('user_roles').select('*')
+      supabase.from('user_roles').select('*'),
+      supabase.from('feedback_config').select('*').order('config_key')
     ]);
 
     if (profilesRes.data) {
@@ -88,6 +103,9 @@ export default function Admin() {
     }
     if (rolesRes.data) {
       setUserRoles(rolesRes.data as UserRole[]);
+    }
+    if (configsRes.data) {
+      setFeedbackConfigs(configsRes.data as FeedbackConfig[]);
     }
     setLoadingData(false);
   };
@@ -305,6 +323,35 @@ export default function Admin() {
     }
   };
 
+  const handleSaveConfig = async (config: FeedbackConfig) => {
+    setIsSavingConfig(true);
+    const { error } = await supabase
+      .from('feedback_config')
+      .update({ config_value: config.config_value })
+      .eq('id', config.id);
+
+    if (error) {
+      toast.error('Không thể lưu cấu hình: ' + error.message);
+    } else {
+      toast.success('Đã lưu cấu hình');
+      setEditingConfig(null);
+      fetchData();
+    }
+    setIsSavingConfig(false);
+  };
+
+  const getConfigLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      class_name: 'Tên lớp học',
+      age_range: 'Độ tuổi học sinh',
+      teacher_pronoun: 'Xưng hô giáo viên',
+      student_pronoun: 'Gọi học sinh',
+      batch_prompt: 'Prompt nhận xét hàng loạt',
+      individual_prompt: 'Prompt nhận xét từng học sinh',
+    };
+    return labels[key] || key;
+  };
+
   const getRoleBadgeVariant = (role: AppRole) => {
     switch (role) {
       case 'admin': return 'destructive';
@@ -342,7 +389,7 @@ export default function Admin() {
             <div className="flex items-center gap-2">
               <Shield className="h-6 w-6 text-primary" />
               <h1 className="text-xl font-bold text-foreground">
-                {isAdmin ? 'Quản lý Users' : 'Quản lý học sinh'}
+                Quản trị hệ thống
               </h1>
             </div>
           </div>
@@ -574,134 +621,253 @@ export default function Admin() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Danh sách Users</CardTitle>
-            <CardDescription>
-              {isAdmin ? 'Quản lý vai trò của users trong hệ thống' : 'Xem danh sách users trong hệ thống'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingData ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : profiles.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Chưa có user nào trong hệ thống
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Họ tên</TableHead>
-                    <TableHead>User ID</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead>Roles</TableHead>
-                    {isAdmin && <TableHead>Hành động</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {profiles.map((profile) => {
-                    const roles = getUserRoles(profile.user_id);
-                    return (
-                      <TableRow key={profile.id}>
-                        <TableCell className="font-medium">
-                          {profile.full_name || 'Chưa cập nhật'}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {profile.user_id.slice(0, 8)}...
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {new Date(profile.created_at).toLocaleDateString('vi-VN')}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {roles.length === 0 ? (
-                              <span className="text-muted-foreground text-sm">Chưa có role</span>
-                            ) : (
-                              roles.map((role) => (
-                                <Badge 
-                                  key={role} 
-                                  variant={getRoleBadgeVariant(role)}
-                                  className={isAdmin ? 'cursor-pointer' : ''}
-                                  onClick={isAdmin ? () => handleRemoveRole(profile.user_id, role) : undefined}
-                                >
-                                  {getRoleLabel(role)}
-                                  {isAdmin && <Trash2 className="h-3 w-3 ml-1" />}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
-                        </TableCell>
-                        {isAdmin && (
-                          <TableCell>
-                            <Dialog open={isDialogOpen && selectedUser?.id === profile.id} onOpenChange={(open) => {
-                              setIsDialogOpen(open);
-                              if (open) setSelectedUser(profile);
-                            }}>
-                              <DialogTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                  <UserPlus className="h-4 w-4 mr-1" />
-                                  Thêm role
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Thêm role cho {profile.full_name || 'user'}</DialogTitle>
-                                  <DialogDescription>
-                                    Chọn vai trò muốn gán
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4">
-                                  <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as AppRole)}>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Chọn role" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="admin">Admin</SelectItem>
-                                      <SelectItem value="teacher">Giáo viên</SelectItem>
-                                      <SelectItem value="student">Học sinh</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <div className="flex justify-end gap-2">
-                                    <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                                      Hủy
-                                    </Button>
-                                    <Button onClick={handleAddRole} disabled={isAddingRole}>
-                                      {isAddingRole ? (
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                      ) : (
-                                        <UserPlus className="h-4 w-4 mr-2" />
-                                      )}
+        <Tabs defaultValue="users" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="users">Quản lý Users</TabsTrigger>
+            <TabsTrigger value="feedback-config">
+              <Settings className="h-4 w-4 mr-2" />
+              Cấu hình AI Feedback
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Danh sách Users</CardTitle>
+                <CardDescription>
+                  {isAdmin ? 'Quản lý vai trò của users trong hệ thống' : 'Xem danh sách users trong hệ thống'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingData ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : profiles.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Chưa có user nào trong hệ thống
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Họ tên</TableHead>
+                        <TableHead>User ID</TableHead>
+                        <TableHead>Ngày tạo</TableHead>
+                        <TableHead>Roles</TableHead>
+                        {isAdmin && <TableHead>Hành động</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {profiles.map((profile) => {
+                        const roles = getUserRoles(profile.user_id);
+                        return (
+                          <TableRow key={profile.id}>
+                            <TableCell className="font-medium">
+                              {profile.full_name || 'Chưa cập nhật'}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {profile.user_id.slice(0, 8)}...
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(profile.created_at).toLocaleDateString('vi-VN')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {roles.length === 0 ? (
+                                  <span className="text-muted-foreground text-sm">Chưa có role</span>
+                                ) : (
+                                  roles.map((role) => (
+                                    <Badge 
+                                      key={role} 
+                                      variant={getRoleBadgeVariant(role)}
+                                      className={isAdmin ? 'cursor-pointer' : ''}
+                                      onClick={isAdmin ? () => handleRemoveRole(profile.user_id, role) : undefined}
+                                    >
+                                      {getRoleLabel(role)}
+                                      {isAdmin && <Trash2 className="h-3 w-3 ml-1" />}
+                                    </Badge>
+                                  ))
+                                )}
+                              </div>
+                            </TableCell>
+                            {isAdmin && (
+                              <TableCell>
+                                <Dialog open={isDialogOpen && selectedUser?.id === profile.id} onOpenChange={(open) => {
+                                  setIsDialogOpen(open);
+                                  if (open) setSelectedUser(profile);
+                                }}>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                      <UserPlus className="h-4 w-4 mr-1" />
                                       Thêm role
                                     </Button>
-                                  </div>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Thêm role cho {profile.full_name || 'user'}</DialogTitle>
+                                      <DialogDescription>
+                                        Chọn vai trò muốn gán
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as AppRole)}>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Chọn role" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="admin">Admin</SelectItem>
+                                          <SelectItem value="teacher">Giáo viên</SelectItem>
+                                          <SelectItem value="student">Học sinh</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <div className="flex justify-end gap-2">
+                                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                                          Hủy
+                                        </Button>
+                                        <Button onClick={handleAddRole} disabled={isAddingRole}>
+                                          {isAddingRole ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                          ) : (
+                                            <UserPlus className="h-4 w-4 mr-2" />
+                                          )}
+                                          Thêm role
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
 
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Hướng dẫn</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p><Badge variant="destructive">Admin</Badge> - Có toàn quyền quản lý hệ thống và tạo tất cả loại tài khoản</p>
-            <p><Badge>Giáo viên</Badge> - Có thể tạo lớp, quản lý buổi học, chấm điểm và tạo tài khoản học sinh</p>
-            <p><Badge variant="secondary">Học sinh</Badge> - Có thể xem buổi học và nộp bài</p>
-            {isAdmin && <p className="mt-4">Click vào badge role để xóa role đó.</p>}
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Hướng dẫn</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p><Badge variant="destructive">Admin</Badge> - Có toàn quyền quản lý hệ thống và tạo tất cả loại tài khoản</p>
+                <p><Badge>Giáo viên</Badge> - Có thể tạo lớp, quản lý buổi học, chấm điểm và tạo tài khoản học sinh</p>
+                <p><Badge variant="secondary">Học sinh</Badge> - Có thể xem buổi học và nộp bài</p>
+                {isAdmin && <p className="mt-4">Click vào badge role để xóa role đó.</p>}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="feedback-config" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Cấu hình AI Feedback
+                </CardTitle>
+                <CardDescription>
+                  Tùy chỉnh prompt và thông tin lớp học cho chức năng tạo nhận xét AI
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingData ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : feedbackConfigs.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Chưa có cấu hình nào
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Short configs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {feedbackConfigs
+                        .filter(c => !c.config_key.includes('prompt'))
+                        .map((config) => (
+                          <div key={config.id} className="space-y-2">
+                            <Label htmlFor={config.config_key}>{getConfigLabel(config.config_key)}</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id={config.config_key}
+                                value={editingConfig?.id === config.id ? editingConfig.config_value : config.config_value}
+                                onChange={(e) => setEditingConfig({ ...config, config_value: e.target.value })}
+                                onFocus={() => setEditingConfig(config)}
+                                className="flex-1"
+                              />
+                              {editingConfig?.id === config.id && (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleSaveConfig(editingConfig)}
+                                  disabled={isSavingConfig}
+                                >
+                                  {isSavingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                </Button>
+                              )}
+                            </div>
+                            {config.description && (
+                              <p className="text-xs text-muted-foreground">{config.description}</p>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+
+                    {/* Prompt configs */}
+                    <div className="space-y-6 pt-4 border-t">
+                      {feedbackConfigs
+                        .filter(c => c.config_key.includes('prompt'))
+                        .map((config) => (
+                          <div key={config.id} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor={config.config_key}>{getConfigLabel(config.config_key)}</Label>
+                              {editingConfig?.id === config.id && (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleSaveConfig(editingConfig)}
+                                  disabled={isSavingConfig}
+                                >
+                                  {isSavingConfig ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Save className="h-4 w-4 mr-2" />
+                                  )}
+                                  Lưu
+                                </Button>
+                              )}
+                            </div>
+                            <Textarea
+                              id={config.config_key}
+                              value={editingConfig?.id === config.id ? editingConfig.config_value : config.config_value}
+                              onChange={(e) => setEditingConfig({ ...config, config_value: e.target.value })}
+                              onFocus={() => setEditingConfig(config)}
+                              rows={12}
+                              className="font-mono text-sm"
+                            />
+                            {config.description && (
+                              <p className="text-xs text-muted-foreground">{config.description}</p>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-muted p-4 rounded-lg text-sm space-y-2">
+                      <p className="font-medium">Biến placeholder có thể dùng trong prompt:</p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                        <li><code className="bg-background px-1 rounded">{'{class_name}'}</code> - Tên lớp học</li>
+                        <li><code className="bg-background px-1 rounded">{'{age_range}'}</code> - Độ tuổi học sinh</li>
+                        <li><code className="bg-background px-1 rounded">{'{teacher_pronoun}'}</code> - Xưng hô giáo viên</li>
+                        <li><code className="bg-background px-1 rounded">{'{student_pronoun}'}</code> - Gọi học sinh</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
