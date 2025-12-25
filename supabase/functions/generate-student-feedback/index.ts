@@ -76,36 +76,55 @@ ${studentList}
 Hãy viết nhận xét chung cho buổi học này theo đúng format yêu cầu.`;
 
     } else {
-      // Individual feedback for one student
-      systemPrompt = `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét cho phụ huynh về tiến độ học tập của học sinh. 
-Hãy viết nhận xét theo format sau và PHẢI tuân thủ chính xác:
+      // Individual feedback for one student - Game Maker Basic, ages 9-13
+      systemPrompt = `Bạn là thầy giáo dạy Game Maker Basic cho học sinh 9-13 tuổi. Xưng hô "bạn - thầy".
+Viết nhận xét theo format CHÍNH XÁC sau (plain text, dễ copy vào Zalo):
 
-**Điểm đã làm được:**
-- [Liệt kê các điểm tích cực, kỹ năng đã thể hiện tốt]
+[Tên học sinh]
 
-**Chưa làm được:**
-- [Liệt kê các điểm cần cải thiện, lỗi mắc phải nếu có]
+Tự học: [25-50 từ nhận xét về khả năng tự học, tự tìm hiểu]
 
-**Điểm cần cải thiện:**
-- [Đề xuất cụ thể cách cải thiện]
+Học tại lớp: [25-50 từ nhận xét về thái độ, tập trung trong giờ học]
 
-**Sự tiến bộ:**
-- [Nhận xét về sự tiến bộ so với các buổi trước nếu có thông tin, hoặc tiềm năng phát triển]
+Giao tiếp: [25-50 từ nhận xét về khả năng trao đổi, hỏi đáp với thầy và bạn]
 
-Lưu ý:
-- Viết bằng tiếng Việt, giọng văn thân thiện nhưng chuyên nghiệp
-- Nhận xét cụ thể, không chung chung
-- Mỗi mục có 1-3 ý
-- Nếu không có thông tin về mục nào, hãy ghi "Chưa có đủ thông tin đánh giá"`;
+Giải quyết vấn đề: [25-50 từ nhận xét về cách xử lý lỗi, debug, tìm giải pháp]
+
+Máy tính: [25-50 từ nhận xét về kỹ năng sử dụng máy tính cơ bản]
+
+Tư duy máy tính: [25-50 từ nhận xét về logic, thuật toán, hiểu code]
+
+Sáng tạo: [25-50 từ nhận xét về ý tưởng, thiết kế game riêng]
+
+Trên lớp: [25-50 từ nhận xét về hoàn thành bài tập trên lớp]
+
+Ở nhà: [25-50 từ nhận xét về làm bài tập về nhà]
+
+Đánh giá chung: [25-50 từ tổng kết sự tiến bộ và định hướng cải thiện]
+
+QUY TẮC:
+- Văn phong thân thiện, dễ hiểu với lứa tuổi tiểu học/THCS
+- Mỗi tiêu chí gợi ý điểm mạnh và góp ý nhẹ nhàng nếu cần
+- KHÔNG dùng markdown, chỉ plain text
+- Dựa vào dữ liệu thực tế từ ghi chú các buổi và bài nộp
+- Nếu thiếu thông tin tiêu chí nào, viết nhận xét trung lập và khuyến khích`;
+
+      const previousNotesText = previousNotes?.length > 0 
+        ? previousNotes.map((note: string, idx: number) => `Buổi ${idx + 1}: ${note}`).join('\n')
+        : 'Chưa có ghi chú từ các buổi trước';
 
       userPrompt = `Học sinh: ${studentName}
-Buổi học: ${sessionTitle}
+Buổi học hiện tại: ${sessionTitle}
 Nội dung buổi học: ${sessionContent || 'Không có nội dung chi tiết'}
-Số bài nộp: ${submissions?.length || 0}
-${submissions?.length > 0 ? `Thông tin bài nộp: ${JSON.stringify(submissions.map((s: any) => ({ score: s.score, teacher_note: s.teacher_note })))}` : ''}
-${previousNotes?.length > 0 ? `Ghi chú các buổi trước: ${previousNotes.join('\n')}` : 'Đây là buổi đầu tiên hoặc chưa có ghi chú trước đó'}
 
-Hãy viết nhận xét cho học sinh này.`;
+Thông tin bài nộp buổi này:
+- Số bài nộp: ${submissions?.length || 0}
+${submissions?.length > 0 ? `- Chi tiết: ${submissions.map((s: any) => `Điểm: ${s.score || 'chưa chấm'}, Ghi chú GV: ${s.teacher_note || 'không có'}`).join('; ')}` : '- Chưa nộp bài'}
+
+Ghi chú nhận xét từ các buổi trước:
+${previousNotesText}
+
+Hãy viết nhận xét chi tiết theo đúng format 10 tiêu chí cho học sinh này.`;
     }
 
     console.log('Generating feedback, type:', type);
