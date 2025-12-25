@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock, GripVertical, UserMinus } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Users, CheckCircle, Circle, Trash2, PauseCircle, Pencil, Calendar as CalendarIcon, Clock, GripVertical, UserMinus, UserPlus } from 'lucide-react';
+import AddStudentDialog from './AddStudentDialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
@@ -527,6 +528,17 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                 </Table>
               </ScrollArea>
             )}
+            
+            {/* Add Student Button inside Dialog */}
+            <div className="pt-4 border-t">
+              <AddStudentDialog
+                classId={classData.id}
+                className={currentClass.name}
+                classCode={currentClass.code}
+                enrolledStudentIds={enrolledStudents.map(s => s.user_id)}
+                onStudentAdded={fetchEnrolledStudents}
+              />
+            </div>
           </DialogContent>
         </Dialog>
         
