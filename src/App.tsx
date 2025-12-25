@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Guest from "./pages/Guest";
 import Admin from "./pages/Admin";
 import ShareSession from "./pages/ShareSession";
+import JoinClass from "./pages/JoinClass";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,8 @@ const App = () => (
             <Route path="/guest" element={<Guest />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/share/:sessionId" element={<ShareSession />} />
+            <Route path="/join" element={<JoinClass />} />
+            <Route path="/join/:classCode" element={<JoinClass />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
