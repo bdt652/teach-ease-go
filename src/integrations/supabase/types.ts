@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          api_key: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          is_limited: boolean | null
+          last_used_at: string | null
+          limited_at: string | null
+          name: string | null
+          provider: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          api_key: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_limited?: boolean | null
+          last_used_at?: string | null
+          limited_at?: string | null
+          name?: string | null
+          provider?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          api_key?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_limited?: boolean | null
+          last_used_at?: string | null
+          limited_at?: string | null
+          name?: string | null
+          provider?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       class_enrollments: {
         Row: {
           class_id: string

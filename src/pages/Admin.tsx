@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X, Settings, Save } from 'lucide-react';
+import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X, Settings, Save, Key, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 type AppRole = 'admin' | 'teacher' | 'student';
@@ -23,6 +23,19 @@ interface FeedbackConfig {
   config_key: string;
   config_value: string;
   description: string | null;
+}
+
+interface ApiKey {
+  id: string;
+  provider: string;
+  api_key: string;
+  name: string | null;
+  is_active: boolean;
+  is_limited: boolean;
+  limited_at: string | null;
+  last_used_at: string | null;
+  usage_count: number;
+  created_at: string;
 }
 
 interface Profile {
@@ -78,6 +91,13 @@ export default function Admin() {
   const [editingConfig, setEditingConfig] = useState<FeedbackConfig | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+  // API Keys
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [newApiKeyName, setNewApiKeyName] = useState('');
+  const [newApiKeyValue, setNewApiKeyValue] = useState('');
+  const [isAddingApiKey, setIsAddingApiKey] = useState(false);
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+
   const isAdmin = hasRole('admin');
   const isTeacher = hasRole('teacher');
   const canAccess = isAdmin || isTeacher;
@@ -92,10 +112,11 @@ export default function Admin() {
   }, [user, loading, canAccess, navigate]);
 
   const fetchData = async () => {
-    const [profilesRes, rolesRes, configsRes] = await Promise.all([
+    const [profilesRes, rolesRes, configsRes, apiKeysRes] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_roles').select('*'),
-      supabase.from('feedback_config').select('*').order('config_key')
+      supabase.from('feedback_config').select('*').order('config_key'),
+      isAdmin ? supabase.from('api_keys').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] })
     ]);
 
     if (profilesRes.data) {
@@ -107,6 +128,9 @@ export default function Admin() {
     if (configsRes.data) {
       setFeedbackConfigs(configsRes.data as FeedbackConfig[]);
     }
+    if (apiKeysRes.data) {
+      setApiKeys(apiKeysRes.data as ApiKey[]);
+    }
     setLoadingData(false);
   };
 
@@ -114,7 +138,7 @@ export default function Admin() {
     if (canAccess) {
       fetchData();
     }
-  }, [canAccess]);
+  }, [canAccess, isAdmin]);
 
   const getUserRoles = (userId: string): AppRole[] => {
     return userRoles.filter(r => r.user_id === userId).map(r => r.role);
@@ -368,6 +392,82 @@ export default function Admin() {
       case 'student': return 'Học sinh';
       default: return role;
     }
+  };
+
+  // API Key management
+  const handleAddApiKey = async () => {
+    if (!newApiKeyValue.trim()) {
+      toast.error('Vui lòng nhập API key');
+      return;
+    }
+
+    setIsAddingApiKey(true);
+    const { error } = await supabase
+      .from('api_keys')
+      .insert({
+        provider: 'gemini',
+        api_key: newApiKeyValue.trim(),
+        name: newApiKeyName.trim() || null,
+      });
+
+    if (error) {
+      toast.error('Không thể thêm API key: ' + error.message);
+    } else {
+      toast.success('Đã thêm API key');
+      setNewApiKeyName('');
+      setNewApiKeyValue('');
+      setIsApiKeyDialogOpen(false);
+      fetchData();
+    }
+    setIsAddingApiKey(false);
+  };
+
+  const handleToggleApiKey = async (id: string, isActive: boolean) => {
+    const { error } = await supabase
+      .from('api_keys')
+      .update({ is_active: !isActive })
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Không thể cập nhật: ' + error.message);
+    } else {
+      fetchData();
+    }
+  };
+
+  const handleResetApiKeyLimit = async (id: string) => {
+    const { error } = await supabase
+      .from('api_keys')
+      .update({ is_limited: false, limited_at: null })
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Không thể reset: ' + error.message);
+    } else {
+      toast.success('Đã reset trạng thái limit');
+      fetchData();
+    }
+  };
+
+  const handleDeleteApiKey = async (id: string) => {
+    if (!confirm('Xác nhận xóa API key này?')) return;
+
+    const { error } = await supabase
+      .from('api_keys')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Không thể xóa: ' + error.message);
+    } else {
+      toast.success('Đã xóa API key');
+      fetchData();
+    }
+  };
+
+  const maskApiKey = (key: string) => {
+    if (key.length <= 10) return '****';
+    return key.slice(0, 6) + '...' + key.slice(-4);
   };
 
   if (loading || !canAccess) {
@@ -626,8 +726,14 @@ export default function Admin() {
             <TabsTrigger value="users">Quản lý Users</TabsTrigger>
             <TabsTrigger value="feedback-config">
               <Settings className="h-4 w-4 mr-2" />
-              Cấu hình AI Feedback
+              Cấu hình AI
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="api-keys">
+                <Key className="h-4 w-4 mr-2" />
+                API Keys
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
@@ -867,6 +973,172 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="api-keys" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Key className="h-5 w-5" />
+                        Quản lý API Keys
+                      </CardTitle>
+                      <CardDescription>
+                        Thêm nhiều Gemini API keys để tự động rotation khi hết limit
+                      </CardDescription>
+                    </div>
+                    <Dialog open={isApiKeyDialogOpen} onOpenChange={setIsApiKeyDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Thêm API Key
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Thêm API Key mới</DialogTitle>
+                          <DialogDescription>
+                            Lấy API key từ Google AI Studio: https://aistudio.google.com/apikey
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="api-key-name">Tên (tùy chọn)</Label>
+                            <Input
+                              id="api-key-name"
+                              placeholder="Ví dụ: Key 1, Personal, ..."
+                              value={newApiKeyName}
+                              onChange={(e) => setNewApiKeyName(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="api-key-value">API Key *</Label>
+                            <Input
+                              id="api-key-value"
+                              type="password"
+                              placeholder="AIzaSy..."
+                              value={newApiKeyValue}
+                              onChange={(e) => setNewApiKeyValue(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setIsApiKeyDialogOpen(false)}>
+                              Hủy
+                            </Button>
+                            <Button onClick={handleAddApiKey} disabled={isAddingApiKey}>
+                              {isAddingApiKey ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Plus className="h-4 w-4 mr-2" />
+                              )}
+                              Thêm
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingData ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  ) : apiKeys.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>Chưa có API key nào</p>
+                      <p className="text-sm">Thêm API key để sử dụng chức năng AI</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Tên</TableHead>
+                          <TableHead>API Key</TableHead>
+                          <TableHead>Trạng thái</TableHead>
+                          <TableHead>Lần dùng cuối</TableHead>
+                          <TableHead>Số lần dùng</TableHead>
+                          <TableHead>Hành động</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {apiKeys.map((key) => (
+                          <TableRow key={key.id}>
+                            <TableCell className="font-medium">
+                              {key.name || 'Không tên'}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">
+                              {maskApiKey(key.api_key)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {key.is_limited ? (
+                                  <Badge variant="destructive">Limited</Badge>
+                                ) : key.is_active ? (
+                                  <Badge variant="default">Active</Badge>
+                                ) : (
+                                  <Badge variant="secondary">Inactive</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {key.last_used_at 
+                                ? new Date(key.last_used_at).toLocaleString('vi-VN')
+                                : 'Chưa dùng'}
+                            </TableCell>
+                            <TableCell>{key.usage_count}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleToggleApiKey(key.id, key.is_active)}
+                                  title={key.is_active ? 'Tắt' : 'Bật'}
+                                >
+                                  {key.is_active ? 'Tắt' : 'Bật'}
+                                </Button>
+                                {key.is_limited && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleResetApiKeyLimit(key.id)}
+                                    title="Reset limit"
+                                  >
+                                    <RefreshCw className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleDeleteApiKey(key.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+
+                  <div className="mt-6 bg-muted p-4 rounded-lg text-sm space-y-2">
+                    <p className="font-medium">Cách hoạt động:</p>
+                    <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                      <li>Hệ thống sẽ tự động chọn key ít dùng nhất</li>
+                      <li>Khi key hết limit (429), sẽ tự động chuyển sang key tiếp theo</li>
+                      <li>Key bị limit sẽ tự động được reset sau 1 phút</li>
+                      <li>Nếu không có key trong database, hệ thống sẽ dùng GEMINI_API_KEY từ env</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
