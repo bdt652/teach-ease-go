@@ -2,3 +2,6 @@ project_id = "fwqccwahklpdfuwsumho"
 
 [functions.create-user]
 verify_jwt = false
+
+[functions.generate-student-feedback]
+verify_jwt = true
