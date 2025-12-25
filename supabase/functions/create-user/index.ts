@@ -13,22 +13,10 @@ Deno.serve(async (req) => {
       throw new Error('Missing authorization header')
     }
 
-    // Create client with user's token to verify they're admin
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: { headers: { Authorization: authHeader } }
-      }
-    )
+    // Extract the token from Bearer header
+    const token = authHeader.replace('Bearer ', '')
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
-    if (userError || !user) {
-      throw new Error('Unauthorized')
-    }
-
-    // Check if user is admin using service role client
+    // Create admin client to verify the user
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -40,6 +28,14 @@ Deno.serve(async (req) => {
       }
     )
 
+    // Verify the JWT token and get user
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+    if (userError || !user) {
+      console.error('Auth error:', userError)
+      throw new Error('Unauthorized - Invalid token')
+    }
+
+    // Check if user is admin or teacher
     // Check if user is admin or teacher
     const { data: isAdmin } = await supabaseAdmin.rpc('has_role', {
       _user_id: user.id,
