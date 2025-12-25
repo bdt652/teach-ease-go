@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ============================================
-// CẤU HÌNH MẶC ĐỊNH - Sẽ bị ghi đè bởi database
+// CẤU HÌNH MẶC ĐỊNH
 // ============================================
 
 const DEFAULT_CONFIG = {
@@ -25,6 +25,66 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
+// Lấy API key khả dụng từ database (rotation)
+async function getAvailableApiKey(supabase: any): Promise<{ id: string; key: string } | null> {
+  // Lấy key active, chưa bị limit, ưu tiên key ít dùng nhất
+  const { data, error } = await supabase
+    .from("api_keys")
+    .select("id, api_key")
+    .eq("provider", "gemini")
+    .eq("is_active", true)
+    .eq("is_limited", false)
+    .order("usage_count", { ascending: true })
+    .order("last_used_at", { ascending: true, nullsFirst: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching API key:", error);
+    return null;
+  }
+
+  return data ? { id: data.id, key: data.api_key } : null;
+}
+
+// Đánh dấu key đã bị limit
+async function markKeyAsLimited(supabase: any, keyId: string) {
+  await supabase
+    .from("api_keys")
+    .update({ 
+      is_limited: true, 
+      limited_at: new Date().toISOString() 
+    })
+    .eq("id", keyId);
+  
+  console.log(`Marked API key ${keyId} as limited`);
+}
+
+// Cập nhật usage count và last_used
+async function updateKeyUsage(supabase: any, keyId: string) {
+  await supabase.rpc('increment_api_key_usage', { key_id: keyId }).catch(() => {
+    // Fallback nếu RPC chưa tồn tại
+    supabase
+      .from("api_keys")
+      .update({ 
+        last_used_at: new Date().toISOString(),
+        usage_count: supabase.sql`usage_count + 1`
+      })
+      .eq("id", keyId);
+  });
+}
+
+// Reset các key đã hết limit (sau 1 phút)
+async function resetLimitedKeys(supabase: any) {
+  const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+  
+  await supabase
+    .from("api_keys")
+    .update({ is_limited: false, limited_at: null })
+    .eq("is_limited", true)
+    .lt("limited_at", oneMinuteAgo);
+}
+
 // Lấy config từ database
 async function getConfig(supabase: any): Promise<Record<string, string>> {
   const { data, error } = await supabase
@@ -44,33 +104,24 @@ async function getConfig(supabase: any): Promise<Record<string, string>> {
   return config;
 }
 
-// Lấy tên lớp từ session_id hoặc class_id
-async function getClassName(supabase: any, sessionId?: string, classId?: string): Promise<string> {
+// Lấy tên lớp từ session_id
+async function getClassName(supabase: any, sessionId?: string): Promise<string> {
+  if (!sessionId) return "Lớp học";
+  
   try {
-    if (classId) {
-      const { data } = await supabase
+    const { data: session } = await supabase
+      .from("sessions")
+      .select("class_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    
+    if (session?.class_id) {
+      const { data: classData } = await supabase
         .from("classes")
         .select("name")
-        .eq("id", classId)
+        .eq("id", session.class_id)
         .maybeSingle();
-      return data?.name || "Lớp học";
-    }
-    
-    if (sessionId) {
-      const { data: session } = await supabase
-        .from("sessions")
-        .select("class_id")
-        .eq("id", sessionId)
-        .maybeSingle();
-      
-      if (session?.class_id) {
-        const { data: classData } = await supabase
-          .from("classes")
-          .select("name")
-          .eq("id", session.class_id)
-          .maybeSingle();
-        return classData?.name || "Lớp học";
-      }
+      return classData?.name || "Lớp học";
     }
     
     return "Lớp học";
@@ -89,15 +140,86 @@ function replacePlaceholders(template: string, config: Record<string, string>, c
     .replace(/{student_pronoun}/g, config.student_pronoun || DEFAULT_CONFIG.student_pronoun);
 }
 
-// Hàm gọi Gemini API
+// Hàm gọi Gemini API với retry và rotation
+async function callGeminiAPIWithRotation(
+  supabase: any,
+  systemPrompt: string, 
+  userPrompt: string, 
+  maxRetries: number = 3
+): Promise<string> {
+  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  
+  // Reset các key đã hết limit trước
+  await resetLimitedKeys(supabase);
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const keyData = await getAvailableApiKey(supabase);
+    
+    if (!keyData) {
+      // Không còn key nào khả dụng, thử dùng env variable
+      const envKey = Deno.env.get("GEMINI_API_KEY");
+      if (envKey) {
+        console.log("No database keys available, using env GEMINI_API_KEY");
+        return await callGeminiAPI(systemPrompt, userPrompt, envKey);
+      }
+      throw new Error("Không có API key khả dụng. Vui lòng thêm API key trong Admin hoặc thử lại sau.");
+    }
+
+    console.log(`Attempt ${attempt + 1}: Using API key ${keyData.id.slice(0, 8)}...`);
+
+    try {
+      const response = await fetch(`${API_URL}?key=${keyData.key}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\n---\n\n${userPrompt}` }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4096,
+          },
+        }),
+      });
+
+      if (response.status === 429 || response.status === 403) {
+        // Rate limited hoặc quota exceeded - đánh dấu key và thử key khác
+        console.log(`API key ${keyData.id.slice(0, 8)} hit rate limit (${response.status})`);
+        await markKeyAsLimited(supabase, keyData.id);
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini API error:", response.status, errorText);
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      // Thành công - cập nhật usage
+      await updateKeyUsage(supabase, keyData.id);
+      
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      
+    } catch (error) {
+      if (attempt === maxRetries - 1) throw error;
+      console.error(`Attempt ${attempt + 1} failed:`, error);
+    }
+  }
+
+  throw new Error("Đã thử tất cả API keys nhưng không thành công");
+}
+
+// Hàm gọi Gemini API đơn giản (fallback)
 async function callGeminiAPI(systemPrompt: string, userPrompt: string, apiKey: string) {
   const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
   
   const response = await fetch(`${API_URL}?key=${apiKey}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [
         {
@@ -198,21 +320,16 @@ serve(async (req) => {
       students, 
       homework 
     } = await req.json();
-    
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not configured");
-    }
 
     const supabase = getSupabaseClient();
 
     // Lấy config và tên lớp từ database
     const [config, className] = await Promise.all([
       getConfig(supabase),
-      getClassName(supabase, sessionId, classId)
+      getClassName(supabase, sessionId)
     ]);
 
-    console.log('Loaded config from database, class:', className);
+    console.log('Loaded config, class:', className);
 
     let systemPrompt: string;
     let userPrompt: string;
@@ -231,7 +348,8 @@ serve(async (req) => {
 
     console.log('Generating feedback, type:', type);
 
-    const feedback = await callGeminiAPI(systemPrompt, userPrompt, apiKey);
+    // Gọi API với rotation
+    const feedback = await callGeminiAPIWithRotation(supabase, systemPrompt, userPrompt);
 
     console.log('Generated feedback successfully');
 
