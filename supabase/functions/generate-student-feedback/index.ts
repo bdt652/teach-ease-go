@@ -1,29 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// ============================================
+// CẤU HÌNH - SỬA Ở ĐÂY
+// ============================================
+
+const CONFIG = {
+  // API Configuration - Đổi API key name và URL ở đây
+  API_KEY_NAME: "GEMINI_API_KEY", // Tên secret trong Supabase
+  API_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+  
+  // Thông tin lớp học
+  CLASS_INFO: {
+    subject: "Game Maker Basic",
+    ageRange: "9-13 tuổi",
+    teacherPronoun: "thầy",
+    studentPronoun: "bạn",
+  },
 };
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+// ============================================
+// PROMPT TEMPLATES - SỬA NỘI DUNG PROMPT Ở ĐÂY
+// ============================================
 
-  try {
-    const { type, studentName, sessionTitle, sessionContent, previousNotes, submissions, students, homework } = await req.json();
-    
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    let systemPrompt: string;
-    let userPrompt: string;
-
-    if (type === 'batch') {
-      // Batch feedback for all students - format for Zalo copy-paste
-      systemPrompt = `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh qua Zalo.
+const PROMPTS = {
+  // Prompt cho nhận xét hàng loạt (batch)
+  batchSystem: `Bạn là một giáo viên chuyên nghiệp đang viết nhận xét buổi học để gửi cho phụ huynh qua Zalo.
 Hãy viết nhận xét theo format CHÍNH XÁC như sau (plain text, không dùng markdown):
 
 [Tiêu đề buổi học]
@@ -53,31 +54,10 @@ QUY TẮC BẮT BUỘC:
 - Đoạn văn PHẢI bao gồm đủ 4 ý: đã làm được, chưa làm được, cần cải thiện, sự tiến bộ
 - Viết tiếng Việt thân thiện, chuyên nghiệp
 - Nếu học sinh nghỉ, ghi "[Tên] - Nghỉ học buổi này."
-- Kết quả phải copy-paste trực tiếp vào Zalo được`;
+- Kết quả phải copy-paste trực tiếp vào Zalo được`,
 
-      const studentList = students.map((s: any) => {
-        const subInfo = s.submissions?.length > 0 
-          ? `Đã nộp ${s.submissions.length} bài, điểm: ${s.submissions.map((sub: any) => sub.score || 'chưa chấm').join(', ')}, ghi chú GV: ${s.submissions.map((sub: any) => sub.teacher_note || '').filter(Boolean).join('; ') || 'không có'}`
-          : 'Chưa nộp bài';
-        return `- ${s.name}: ${subInfo}`;
-      }).join('\n');
-
-      userPrompt = `Buổi học: ${sessionTitle}
-
-Nội dung buổi học: 
-${sessionContent || 'Không có nội dung chi tiết'}
-
-Bài tập về nhà:
-${homework || 'Chưa có thông tin bài tập'}
-
-Danh sách học sinh và thông tin bài nộp:
-${studentList}
-
-Hãy viết nhận xét chung cho buổi học này theo đúng format yêu cầu.`;
-
-    } else {
-      // Individual feedback for one student - Game Maker Basic, ages 9-13
-      systemPrompt = `Bạn là thầy giáo dạy Game Maker Basic cho học sinh 9-13 tuổi. Xưng hô "bạn - thầy".
+  // Prompt cho nhận xét từng học sinh
+  individualSystem: `Bạn là ${CONFIG.CLASS_INFO.teacherPronoun} giáo dạy ${CONFIG.CLASS_INFO.subject} cho học sinh ${CONFIG.CLASS_INFO.ageRange}. Xưng hô "${CONFIG.CLASS_INFO.studentPronoun} - ${CONFIG.CLASS_INFO.teacherPronoun}".
 Viết nhận xét theo format CHÍNH XÁC sau (plain text, dễ copy vào Zalo):
 
 [Tên học sinh]
@@ -107,13 +87,79 @@ QUY TẮC:
 - Mỗi tiêu chí gợi ý điểm mạnh và góp ý nhẹ nhàng nếu cần
 - KHÔNG dùng markdown, chỉ plain text
 - Dựa vào dữ liệu thực tế từ ghi chú các buổi và bài nộp
-- Nếu thiếu thông tin tiêu chí nào, viết nhận xét trung lập và khuyến khích`;
+- Nếu thiếu thông tin tiêu chí nào, viết nhận xét trung lập và khuyến khích`,
+};
 
-      const previousNotesText = previousNotes?.length > 0 
-        ? previousNotes.map((note: string, idx: number) => `Buổi ${idx + 1}: ${note}`).join('\n')
-        : 'Chưa có ghi chú từ các buổi trước';
+// ============================================
+// CODE CHÍNH - KHÔNG CẦN SỬA PHẦN NÀY
+// ============================================
 
-      userPrompt = `Học sinh: ${studentName}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Hàm gọi Gemini API
+async function callGeminiAPI(systemPrompt: string, userPrompt: string, apiKey: string) {
+  const response = await fetch(`${CONFIG.API_URL}?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${systemPrompt}\n\n---\n\n${userPrompt}` }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini API error:", response.status, errorText);
+    throw new Error(`Gemini API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+// Tạo user prompt cho batch
+function buildBatchUserPrompt(sessionTitle: string, sessionContent: string, homework: string, students: any[]) {
+  const studentList = students.map((s: any) => {
+    const subInfo = s.submissions?.length > 0 
+      ? `Đã nộp ${s.submissions.length} bài, điểm: ${s.submissions.map((sub: any) => sub.score || 'chưa chấm').join(', ')}, ghi chú GV: ${s.submissions.map((sub: any) => sub.teacher_note || '').filter(Boolean).join('; ') || 'không có'}`
+      : 'Chưa nộp bài';
+    return `- ${s.name}: ${subInfo}`;
+  }).join('\n');
+
+  return `Buổi học: ${sessionTitle}
+
+Nội dung buổi học: 
+${sessionContent || 'Không có nội dung chi tiết'}
+
+Bài tập về nhà:
+${homework || 'Chưa có thông tin bài tập'}
+
+Danh sách học sinh và thông tin bài nộp:
+${studentList}
+
+Hãy viết nhận xét chung cho buổi học này theo đúng format yêu cầu.`;
+}
+
+// Tạo user prompt cho individual
+function buildIndividualUserPrompt(studentName: string, sessionTitle: string, sessionContent: string, submissions: any[], previousNotes: string[]) {
+  const previousNotesText = previousNotes?.length > 0 
+    ? previousNotes.map((note: string, idx: number) => `Buổi ${idx + 1}: ${note}`).join('\n')
+    : 'Chưa có ghi chú từ các buổi trước';
+
+  return `Học sinh: ${studentName}
 Buổi học hiện tại: ${sessionTitle}
 Nội dung buổi học: ${sessionContent || 'Không có nội dung chi tiết'}
 
@@ -125,47 +171,35 @@ Ghi chú nhận xét từ các buổi trước:
 ${previousNotesText}
 
 Hãy viết nhận xét chi tiết theo đúng format 10 tiêu chí cho học sinh này.`;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { type, studentName, sessionTitle, sessionContent, previousNotes, submissions, students, homework } = await req.json();
+    
+    const apiKey = Deno.env.get(CONFIG.API_KEY_NAME);
+    if (!apiKey) {
+      throw new Error(`${CONFIG.API_KEY_NAME} is not configured`);
+    }
+
+    let systemPrompt: string;
+    let userPrompt: string;
+
+    if (type === 'batch') {
+      systemPrompt = PROMPTS.batchSystem;
+      userPrompt = buildBatchUserPrompt(sessionTitle, sessionContent, homework, students);
+    } else {
+      systemPrompt = PROMPTS.individualSystem;
+      userPrompt = buildIndividualUserPrompt(studentName, sessionTitle, sessionContent, submissions, previousNotes);
     }
 
     console.log('Generating feedback, type:', type);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Đã vượt quá giới hạn yêu cầu, vui lòng thử lại sau." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Cần nạp thêm credits để sử dụng tính năng AI." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const feedback = data.choices?.[0]?.message?.content;
+    const feedback = await callGeminiAPI(systemPrompt, userPrompt, apiKey);
 
     console.log('Generated feedback successfully');
 
