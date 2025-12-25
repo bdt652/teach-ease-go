@@ -4,4 +4,4 @@ project_id = "fwqccwahklpdfuwsumho"
 verify_jwt = false
 
 [functions.generate-student-feedback]
-verify_jwt = true
+verify_jwt = false
