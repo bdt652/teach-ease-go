@@ -6,7 +6,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ============================================
 
 const DEFAULT_CONFIG = {
-  class_name: "Game Maker Basic",
   age_range: "9-13 tuổi",
   teacher_pronoun: "thầy",
   student_pronoun: "bạn",
@@ -19,19 +18,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Lấy config từ database
-async function getConfig(): Promise<Record<string, string>> {
+// Khởi tạo Supabase client
+function getSupabaseClient() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  return createClient(supabaseUrl, supabaseKey);
+}
 
+// Lấy config từ database
+async function getConfig(supabase: any): Promise<Record<string, string>> {
   const { data, error } = await supabase
     .from("feedback_config")
     .select("config_key, config_value");
 
   if (error) {
     console.error("Error fetching config:", error);
-    return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG };
   }
 
   const config: Record<string, string> = { ...DEFAULT_CONFIG };
@@ -42,13 +44,49 @@ async function getConfig(): Promise<Record<string, string>> {
   return config;
 }
 
+// Lấy tên lớp từ session_id hoặc class_id
+async function getClassName(supabase: any, sessionId?: string, classId?: string): Promise<string> {
+  try {
+    if (classId) {
+      const { data } = await supabase
+        .from("classes")
+        .select("name")
+        .eq("id", classId)
+        .maybeSingle();
+      return data?.name || "Lớp học";
+    }
+    
+    if (sessionId) {
+      const { data: session } = await supabase
+        .from("sessions")
+        .select("class_id")
+        .eq("id", sessionId)
+        .maybeSingle();
+      
+      if (session?.class_id) {
+        const { data: classData } = await supabase
+          .from("classes")
+          .select("name")
+          .eq("id", session.class_id)
+          .maybeSingle();
+        return classData?.name || "Lớp học";
+      }
+    }
+    
+    return "Lớp học";
+  } catch (error) {
+    console.error("Error fetching class name:", error);
+    return "Lớp học";
+  }
+}
+
 // Thay thế placeholder trong prompt
-function replacePlaceholders(template: string, config: Record<string, string>): string {
+function replacePlaceholders(template: string, config: Record<string, string>, className: string): string {
   return template
-    .replace(/{class_name}/g, config.class_name)
-    .replace(/{age_range}/g, config.age_range)
-    .replace(/{teacher_pronoun}/g, config.teacher_pronoun)
-    .replace(/{student_pronoun}/g, config.student_pronoun);
+    .replace(/{class_name}/g, className)
+    .replace(/{age_range}/g, config.age_range || DEFAULT_CONFIG.age_range)
+    .replace(/{teacher_pronoun}/g, config.teacher_pronoun || DEFAULT_CONFIG.teacher_pronoun)
+    .replace(/{student_pronoun}/g, config.student_pronoun || DEFAULT_CONFIG.student_pronoun);
 }
 
 // Hàm gọi Gemini API
@@ -85,7 +123,13 @@ async function callGeminiAPI(systemPrompt: string, userPrompt: string, apiKey: s
 }
 
 // Tạo user prompt cho batch
-function buildBatchUserPrompt(sessionTitle: string, sessionContent: string, homework: string, students: any[]) {
+function buildBatchUserPrompt(
+  className: string,
+  sessionTitle: string, 
+  sessionContent: string, 
+  homework: string, 
+  students: any[]
+) {
   const studentList = students.map((s: any) => {
     const subInfo = s.submissions?.length > 0 
       ? `Đã nộp ${s.submissions.length} bài, điểm: ${s.submissions.map((sub: any) => sub.score || 'chưa chấm').join(', ')}, ghi chú GV: ${s.submissions.map((sub: any) => sub.teacher_note || '').filter(Boolean).join('; ') || 'không có'}`
@@ -93,7 +137,8 @@ function buildBatchUserPrompt(sessionTitle: string, sessionContent: string, home
     return `- ${s.name}: ${subInfo}`;
   }).join('\n');
 
-  return `Buổi học: ${sessionTitle}
+  return `Lớp: ${className}
+Buổi học: ${sessionTitle}
 
 Nội dung buổi học: 
 ${sessionContent || 'Không có nội dung chi tiết'}
@@ -108,12 +153,20 @@ Hãy viết nhận xét chung cho buổi học này theo đúng format yêu cầ
 }
 
 // Tạo user prompt cho individual
-function buildIndividualUserPrompt(studentName: string, sessionTitle: string, sessionContent: string, submissions: any[], previousNotes: string[]) {
+function buildIndividualUserPrompt(
+  className: string,
+  studentName: string, 
+  sessionTitle: string, 
+  sessionContent: string, 
+  submissions: any[], 
+  previousNotes: string[]
+) {
   const previousNotesText = previousNotes?.length > 0 
     ? previousNotes.map((note: string, idx: number) => `Buổi ${idx + 1}: ${note}`).join('\n')
     : 'Chưa có ghi chú từ các buổi trước';
 
-  return `Học sinh: ${studentName}
+  return `Lớp: ${className}
+Học sinh: ${studentName}
 Buổi học hiện tại: ${sessionTitle}
 Nội dung buổi học: ${sessionContent || 'Không có nội dung chi tiết'}
 
@@ -133,26 +186,47 @@ serve(async (req) => {
   }
 
   try {
-    const { type, studentName, sessionTitle, sessionContent, previousNotes, submissions, students, homework } = await req.json();
+    const { 
+      type, 
+      studentName, 
+      sessionId,
+      classId,
+      sessionTitle, 
+      sessionContent, 
+      previousNotes, 
+      submissions, 
+      students, 
+      homework 
+    } = await req.json();
     
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // Lấy config từ database
-    const config = await getConfig();
-    console.log('Loaded config from database');
+    const supabase = getSupabaseClient();
+
+    // Lấy config và tên lớp từ database
+    const [config, className] = await Promise.all([
+      getConfig(supabase),
+      getClassName(supabase, sessionId, classId)
+    ]);
+
+    console.log('Loaded config from database, class:', className);
 
     let systemPrompt: string;
     let userPrompt: string;
 
     if (type === 'batch') {
-      systemPrompt = config.batch_prompt;
-      userPrompt = buildBatchUserPrompt(sessionTitle, sessionContent, homework, students);
+      systemPrompt = config.batch_prompt || DEFAULT_CONFIG.batch_prompt;
+      userPrompt = buildBatchUserPrompt(className, sessionTitle, sessionContent, homework, students);
     } else {
-      systemPrompt = replacePlaceholders(config.individual_prompt, config);
-      userPrompt = buildIndividualUserPrompt(studentName, sessionTitle, sessionContent, submissions, previousNotes);
+      systemPrompt = replacePlaceholders(
+        config.individual_prompt || DEFAULT_CONFIG.individual_prompt, 
+        config, 
+        className
+      );
+      userPrompt = buildIndividualUserPrompt(className, studentName, sessionTitle, sessionContent, submissions, previousNotes);
     }
 
     console.log('Generating feedback, type:', type);
