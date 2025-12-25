@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import SessionContentView from './SessionContentView';
 import FileUploader from './FileUploader';
 import StudentNoteCard from './StudentNoteCard';
+import BatchFeedbackGenerator from './BatchFeedbackGenerator';
 
 interface Session {
   id: string;
@@ -823,10 +824,28 @@ function hello() {
         <TabsContent value="notes">
           <Card>
             <CardHeader>
-              <CardTitle>Ghi chú học sinh</CardTitle>
-              <CardDescription>
-                Ghi chú quá trình học của từng học sinh. Sử dụng "Nhận xét AI" để tự động tạo nhận xét chi tiết cho phụ huynh.
-              </CardDescription>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <CardTitle>Ghi chú học sinh</CardTitle>
+                  <CardDescription>
+                    Ghi chú quá trình học của từng học sinh. Sử dụng "Nhận xét AI" để tự động tạo nhận xét chi tiết cho phụ huynh.
+                  </CardDescription>
+                </div>
+                <BatchFeedbackGenerator
+                  sessionTitle={session.title}
+                  sessionOrder={session.session_order}
+                  sessionContent={content}
+                  students={[
+                    ...enrolledStudents.map(s => ({ userId: s.userId, guestName: null, name: s.fullName })),
+                    ...getUniqueStudents().filter(s => s.guestName && !enrolledStudents.some(e => e.fullName === s.guestName))
+                  ]}
+                  getSubmissionsForStudent={(userId, guestName) => 
+                    submissions
+                      .filter(s => (userId && s.user_id === userId) || (guestName && s.guest_name === guestName))
+                      .map(s => ({ id: s.id, score: s.score, teacher_note: s.teacher_note }))
+                  }
+                />
+              </div>
             </CardHeader>
             <CardContent>
               {loadingNotes ? (
