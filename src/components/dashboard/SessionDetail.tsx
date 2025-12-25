@@ -832,6 +832,7 @@ function hello() {
                   </CardDescription>
                 </div>
                 <BatchFeedbackGenerator
+                  sessionId={session.id}
                   sessionTitle={session.title}
                   sessionOrder={session.session_order}
                   sessionContent={content}

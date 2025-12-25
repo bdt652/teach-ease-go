@@ -62,6 +62,7 @@ export default function StudentNoteCard({
 
       const { data, error } = await supabase.functions.invoke('generate-student-feedback', {
         body: {
+          sessionId,
           studentName: student.name,
           sessionTitle,
           sessionContent,

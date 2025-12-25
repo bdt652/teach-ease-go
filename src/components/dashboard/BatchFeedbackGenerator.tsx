@@ -24,6 +24,7 @@ interface Submission {
 }
 
 interface BatchFeedbackGeneratorProps {
+  sessionId: string;
   sessionTitle: string;
   sessionOrder: number;
   sessionContent: string | null;
@@ -32,6 +33,7 @@ interface BatchFeedbackGeneratorProps {
 }
 
 export default function BatchFeedbackGenerator({
+  sessionId,
   sessionTitle,
   sessionOrder,
   sessionContent,
@@ -55,6 +57,7 @@ export default function BatchFeedbackGenerator({
       const { data, error } = await supabase.functions.invoke('generate-student-feedback', {
         body: {
           type: 'batch',
+          sessionId,
           sessionTitle: `Buổi ${sessionOrder} – ${sessionTitle}`,
           sessionContent,
           students: studentsWithSubmissions,
