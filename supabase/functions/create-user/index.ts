@@ -6,6 +6,10 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
+  // Log IP address for security monitoring
+  const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || 'unknown'
+  console.log('Create user function called from IP:', clientIP)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })

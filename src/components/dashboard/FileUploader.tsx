@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLogger } from '@/hooks/useLogger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +20,7 @@ interface FileUploaderProps {
 }
 
 export default function FileUploader({ sessionId, onFileUploaded }: FileUploaderProps) {
+  const { logFileAction } = useLogger();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export default function FileUploader({ sessionId, onFileUploaded }: FileUploader
 
         if (uploadError) {
           toast.error(`Không thể upload ${file.name}: ${uploadError.message}`);
+          logFileAction('UPLOAD_FAILED', file.name, file.size, { sessionId, error: uploadError.message });
           continue;
         }
 
@@ -64,8 +67,10 @@ export default function FileUploader({ sessionId, onFileUploaded }: FileUploader
         setUploadedFiles((prev) => [...prev, uploadedFile]);
         onFileUploaded?.(uploadedFile);
         toast.success(`Đã upload ${file.name}`);
+        logFileAction('UPLOAD_SUCCESS', file.name, file.size, { sessionId, url: urlData.publicUrl });
       } catch (error) {
         toast.error(`Lỗi khi upload ${file.name}`);
+        logFileAction('UPLOAD_ERROR', file.name, file.size, { sessionId, error: String(error) });
       }
     }
 

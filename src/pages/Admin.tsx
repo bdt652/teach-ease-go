@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X, Settings, Save, Key, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Shield, UserPlus, Trash2, Loader2, Plus, Upload, FileSpreadsheet, AlertCircle, Check, X, Settings, Save, Key, RefreshCw, FileText, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 type AppRole = 'admin' | 'teacher' | 'student';
@@ -49,6 +49,20 @@ interface UserRole {
   id: string;
   user_id: string;
   role: AppRole;
+}
+
+interface UserActionLog {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  action: string;
+  details: any;
+  page: string | null;
+  user_agent: string | null;
+  ip_address: string | null;
+  session_id: string | null;
+  environment: string;
+  timestamp: string;
 }
 
 interface ImportUser {
@@ -98,6 +112,19 @@ export default function Admin() {
   const [isAddingApiKey, setIsAddingApiKey] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
 
+  // Password change
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState<Profile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // User Action Logs
+  const [userActionLogs, setUserActionLogs] = useState<UserActionLog[]>([]);
+  const [logsSearch, setLogsSearch] = useState('');
+  const [logsActionFilter, setLogsActionFilter] = useState('all');
+  const [logsDateFilter, setLogsDateFilter] = useState('all');
+
   const isAdmin = hasRole('admin');
   const isTeacher = hasRole('teacher');
   const canAccess = isAdmin || isTeacher;
@@ -112,11 +139,12 @@ export default function Admin() {
   }, [user, loading, canAccess, navigate]);
 
   const fetchData = async () => {
-    const [profilesRes, rolesRes, configsRes, apiKeysRes] = await Promise.all([
+    const [profilesRes, rolesRes, configsRes, apiKeysRes, logsRes] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_roles').select('*'),
       supabase.from('feedback_config').select('*').order('config_key'),
-      isAdmin ? supabase.from('api_keys').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] })
+      isAdmin ? supabase.from('api_keys').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+      isAdmin ? supabase.from('user_action_logs').select('*').order('timestamp', { ascending: false }).limit(1000) : Promise.resolve({ data: [] })
     ]);
 
     if (profilesRes.data) {
@@ -130,6 +158,9 @@ export default function Admin() {
     }
     if (apiKeysRes.data) {
       setApiKeys(apiKeysRes.data as ApiKey[]);
+    }
+    if (logsRes.data) {
+      setUserActionLogs(logsRes.data as UserActionLog[]);
     }
     setLoadingData(false);
   };
@@ -465,6 +496,51 @@ export default function Admin() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedUserForPassword) return;
+
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Mật khẩu xác nhận không khớp');
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('update-user-password', {
+        body: {
+          userId: selectedUserForPassword.user_id,
+          newPassword: newPassword
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      toast.success(`Đã thay đổi mật khẩu cho ${selectedUserForPassword.full_name || 'user'}`);
+      setIsChangePasswordOpen(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      setSelectedUserForPassword(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể thay đổi mật khẩu');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   const maskApiKey = (key: string) => {
     if (key.length <= 10) return '****';
     return key.slice(0, 6) + '...' + key.slice(-4);
@@ -729,19 +805,25 @@ export default function Admin() {
               Cấu hình AI
             </TabsTrigger>
             {isAdmin && (
-              <TabsTrigger value="api-keys">
-                <Key className="h-4 w-4 mr-2" />
-                API Keys
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="api-keys">
+                  <Key className="h-4 w-4 mr-2" />
+                  API Keys
+                </TabsTrigger>
+                <TabsTrigger value="user-logs">
+                  <FileText className="h-4 w-4 mr-2" />
+                  User Logs
+                </TabsTrigger>
+              </>
             )}
           </TabsList>
 
           <TabsContent value="users" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Danh sách Users</CardTitle>
+                <CardTitle>Quản lý Users</CardTitle>
                 <CardDescription>
-                  {isAdmin ? 'Quản lý vai trò của users trong hệ thống' : 'Xem danh sách users trong hệ thống'}
+                  {isAdmin ? 'Quản lý vai trò và mật khẩu của users trong hệ thống' : 'Xem danh sách users trong hệ thống'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -761,6 +843,7 @@ export default function Admin() {
                         <TableHead>User ID</TableHead>
                         <TableHead>Ngày tạo</TableHead>
                         <TableHead>Roles</TableHead>
+                        <TableHead>Mật khẩu</TableHead>
                         {isAdmin && <TableHead>Hành động</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -784,8 +867,8 @@ export default function Admin() {
                                   <span className="text-muted-foreground text-sm">Chưa có role</span>
                                 ) : (
                                   roles.map((role) => (
-                                    <Badge 
-                                      key={role} 
+                                    <Badge
+                                      key={role}
                                       variant={getRoleBadgeVariant(role)}
                                       className={isAdmin ? 'cursor-pointer' : ''}
                                       onClick={isAdmin ? () => handleRemoveRole(profile.user_id, role) : undefined}
@@ -796,6 +879,75 @@ export default function Admin() {
                                   ))
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              <Dialog open={isChangePasswordOpen && selectedUserForPassword?.id === profile.id} onOpenChange={(open) => {
+                                setIsChangePasswordOpen(open);
+                                if (open) {
+                                  setSelectedUserForPassword(profile);
+                                  setNewPassword('');
+                                  setConfirmPassword('');
+                                }
+                              }}>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <Key className="h-4 w-4 mr-2" />
+                                    Đổi
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Đổi mật khẩu cho {profile.full_name || 'user'}</DialogTitle>
+                                    <DialogDescription>
+                                      Nhập mật khẩu mới cho tài khoản này
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <form onSubmit={handleChangePassword} className="space-y-4">
+                                    <div className="space-y-2">
+                                      <Label htmlFor="new-password">Mật khẩu mới *</Label>
+                                      <Input
+                                        id="new-password"
+                                        type="password"
+                                        placeholder="Tối thiểu 6 ký tự"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        required
+                                        minLength={6}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor="confirm-password">Xác nhận mật khẩu *</Label>
+                                      <Input
+                                        id="confirm-password"
+                                        type="password"
+                                        placeholder="Nhập lại mật khẩu"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        required
+                                        minLength={6}
+                                      />
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                      <Button type="button" variant="outline" onClick={() => setIsChangePasswordOpen(false)}>
+                                        Hủy
+                                      </Button>
+                                      <Button type="submit" disabled={isChangingPassword}>
+                                        {isChangingPassword ? (
+                                          <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Đang đổi...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Key className="h-4 w-4 mr-2" />
+                                            Đổi mật khẩu
+                                          </>
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </form>
+                                </DialogContent>
+                              </Dialog>
                             </TableCell>
                             {isAdmin && (
                               <TableCell>
@@ -862,7 +1014,12 @@ export default function Admin() {
                 <p><Badge variant="destructive">Admin</Badge> - Có toàn quyền quản lý hệ thống và tạo tất cả loại tài khoản</p>
                 <p><Badge>Giáo viên</Badge> - Có thể tạo lớp, quản lý buổi học, chấm điểm và tạo tài khoản học sinh</p>
                 <p><Badge variant="secondary">Học sinh</Badge> - Có thể xem buổi học và nộp bài</p>
-                {isAdmin && <p className="mt-4">Click vào badge role để xóa role đó.</p>}
+                <p className="mt-4 font-medium">Chức năng:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Click vào badge role để xóa role đó (chỉ Admin)</li>
+                  <li>Sử dụng nút "Đổi" để thay đổi mật khẩu user</li>
+                  <li>Sử dụng nút "Thêm role" để gán vai trò mới</li>
+                </ul>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1138,8 +1295,226 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </TabsContent>
-          )}
-        </Tabs>
+            )}
+
+            {isAdmin && (
+              <TabsContent value="user-logs" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      User Action Logs
+                    </CardTitle>
+                    <CardDescription>
+                      Theo dõi tất cả hành động của người dùng trong hệ thống
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Filters */}
+                    <div className="flex gap-4 mb-6">
+                      <div className="flex-1">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Tìm kiếm theo email, action..."
+                            value={logsSearch}
+                            onChange={(e) => setLogsSearch(e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                      </div>
+                      <Select value={logsActionFilter} onValueChange={setLogsActionFilter}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Lọc theo action" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tất cả actions</SelectItem>
+                          <SelectItem value="AUTH">Authentication</SelectItem>
+                          <SelectItem value="CLASS">Class actions</SelectItem>
+                          <SelectItem value="SESSION">Session actions</SelectItem>
+                          <SelectItem value="SUBMISSION">Submissions</SelectItem>
+                          <SelectItem value="FILE">File actions</SelectItem>
+                          <SelectItem value="NAVIGATION">Navigation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={logsDateFilter} onValueChange={setLogsDateFilter}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue placeholder="Thời gian" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Tất cả</SelectItem>
+                          <SelectItem value="today">Hôm nay</SelectItem>
+                          <SelectItem value="week">Tuần này</SelectItem>
+                          <SelectItem value="month">Tháng này</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" onClick={fetchData}>
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Logs Table */}
+                    {loadingData ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : userActionLogs.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Chưa có logs nào</p>
+                        <p className="text-sm">Logs sẽ xuất hiện khi users thực hiện các hành động</p>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[600px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Thời gian</TableHead>
+                              <TableHead>User</TableHead>
+                              <TableHead>Action</TableHead>
+                              <TableHead>IP Address</TableHead>
+                              <TableHead>Page</TableHead>
+                              <TableHead>Environment</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {userActionLogs
+                              .filter(log => {
+                                // Search filter
+                                if (logsSearch) {
+                                  const searchLower = logsSearch.toLowerCase();
+                                  if (!log.user_email?.toLowerCase().includes(searchLower) &&
+                                      !log.action.toLowerCase().includes(searchLower) &&
+                                      !log.page?.toLowerCase().includes(searchLower)) {
+                                    return false;
+                                  }
+                                }
+
+                                // Action filter
+                                if (logsActionFilter !== 'all') {
+                                  if (logsActionFilter === 'AUTH' && !log.action.startsWith('AUTH_')) return false;
+                                  if (logsActionFilter === 'CLASS' && !log.action.startsWith('CLASS_')) return false;
+                                  if (logsActionFilter === 'SESSION' && !log.action.startsWith('SESSION_')) return false;
+                                  if (logsActionFilter === 'SUBMISSION' && !log.action.startsWith('SUBMISSION_')) return false;
+                                  if (logsActionFilter === 'FILE' && !log.action.startsWith('FILE_')) return false;
+                                  if (logsActionFilter === 'NAVIGATION' && log.action !== 'NAVIGATION') return false;
+                                }
+
+                                // Date filter
+                                if (logsDateFilter !== 'all') {
+                                  const logDate = new Date(log.timestamp);
+                                  const now = new Date();
+
+                                  if (logsDateFilter === 'today') {
+                                    if (logDate.toDateString() !== now.toDateString()) return false;
+                                  } else if (logsDateFilter === 'week') {
+                                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                                    if (logDate < weekAgo) return false;
+                                  } else if (logsDateFilter === 'month') {
+                                    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                                    if (logDate < monthAgo) return false;
+                                  }
+                                }
+
+                                return true;
+                              })
+                              .map((log) => (
+                                <TableRow key={log.id}>
+                                  <TableCell className="font-mono text-sm">
+                                    {new Date(log.timestamp).toLocaleString('vi-VN', {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    })}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">
+                                        {log.user_email || 'Anonymous'}
+                                      </div>
+                                      {log.user_id && (
+                                        <div className="text-xs text-muted-foreground">
+                                          ID: {log.user_id.slice(0, 8)}...
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        log.action.startsWith('AUTH_') ? 'default' :
+                                        log.action.startsWith('CLASS_') ? 'secondary' :
+                                        log.action.startsWith('SESSION_') ? 'outline' :
+                                        log.action.startsWith('SUBMISSION_') ? 'destructive' :
+                                        'secondary'
+                                      }
+                                    >
+                                      {log.action}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm">
+                                    {log.ip_address || 'Unknown'}
+                                  </TableCell>
+                                  <TableCell className="text-sm">
+                                    {log.page || '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={log.environment === 'production' ? 'default' : 'secondary'}>
+                                      {log.environment}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    )}
+
+                    {userActionLogs.length > 0 && (
+                      <div className="mt-4 text-sm text-muted-foreground text-center">
+                        Hiển thị {userActionLogs.filter(log => {
+                          // Same filtering logic as above
+                          if (logsSearch) {
+                            const searchLower = logsSearch.toLowerCase();
+                            if (!log.user_email?.toLowerCase().includes(searchLower) &&
+                                !log.action.toLowerCase().includes(searchLower) &&
+                                !log.page?.toLowerCase().includes(searchLower)) {
+                              return false;
+                            }
+                          }
+                          if (logsActionFilter !== 'all') {
+                            if (logsActionFilter === 'AUTH' && !log.action.startsWith('AUTH_')) return false;
+                            if (logsActionFilter === 'CLASS' && !log.action.startsWith('CLASS_')) return false;
+                            if (logsActionFilter === 'SESSION' && !log.action.startsWith('SESSION_')) return false;
+                            if (logsActionFilter === 'SUBMISSION' && !log.action.startsWith('SUBMISSION_')) return false;
+                            if (logsActionFilter === 'FILE' && !log.action.startsWith('FILE_')) return false;
+                            if (logsActionFilter === 'NAVIGATION' && log.action !== 'NAVIGATION') return false;
+                          }
+                          if (logsDateFilter !== 'all') {
+                            const logDate = new Date(log.timestamp);
+                            const now = new Date();
+                            if (logsDateFilter === 'today' && logDate.toDateString() !== now.toDateString()) return false;
+                            if (logsDateFilter === 'week') {
+                              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                              if (logDate < weekAgo) return false;
+                            }
+                            if (logsDateFilter === 'month') {
+                              const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                              if (logDate < monthAgo) return false;
+                            }
+                          }
+                          return true;
+                        }).length} / {userActionLogs.length} logs
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+          </Tabs>
       </main>
     </div>
   );

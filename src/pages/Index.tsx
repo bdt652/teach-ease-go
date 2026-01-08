@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useLogger } from "@/hooks/useLogger";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, Upload, LogIn } from "lucide-react";
+import { GraduationCap, Upload, LogIn, UserPlus } from "lucide-react";
 
 const Index = () => {
   const { user, loading } = useAuth();
+  const { logNavigation } = useLogger();
   const navigate = useNavigate();
 
   return (
@@ -36,7 +38,10 @@ const Index = () => {
             <Button
               size="lg"
               className="w-full h-14 text-lg"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => {
+                logNavigation('/', '/dashboard');
+                navigate("/dashboard");
+              }}
             >
               <GraduationCap className="mr-3 h-6 w-6" />
               Vào lớp học
@@ -48,21 +53,27 @@ const Index = () => {
             <Button
               size="lg"
               className="w-full h-16 text-xl font-semibold"
-              onClick={() => navigate("/guest")}
+              onClick={() => {
+                logNavigation('/', '/guest');
+                navigate("/guest");
+              }}
             >
               <Upload className="mr-3 h-7 w-7" />
               Nộp bài
             </Button>
 
-            {/* Login/Register */}
+            {/* Login */}
             <Button
               size="lg"
               variant="outline"
               className="w-full h-14 text-lg"
-              onClick={() => navigate("/auth")}
+              onClick={() => {
+                logNavigation('/', '/auth');
+                navigate("/auth");
+              }}
             >
               <LogIn className="mr-3 h-6 w-6" />
-              Đăng nhập / Đăng ký
+              Đăng nhập
             </Button>
           </>
         )}

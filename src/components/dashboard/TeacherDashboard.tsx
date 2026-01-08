@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useLogger } from '@/hooks/useLogger';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ interface Class {
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
+  const { logClassAction, logAction } = useLogger();
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -47,15 +49,16 @@ export default function TeacherDashboard() {
 
   const fetchClasses = async () => {
     if (!user) return;
-    
+
     const { data, error } = await supabase
       .from('classes')
       .select('*')
       .eq('teacher_id', user.id)
-      .order('created_at', { ascending: false });
-    
+      .order('created_at', { ascending: false })
+      // Hiển thị đầy đủ khóa học
+
     if (error) {
-      toast.error('Không thể tải danh sách lớp');
+      toast.error('Không thể tải danh sách lớp học');
     } else {
       setClasses(data || []);
     }
@@ -102,18 +105,30 @@ export default function TeacherDashboard() {
     if (error) {
       if (error.code === '23505') {
         toast.error('Mã lớp đã tồn tại');
+        logClassAction('CREATE_FAILED', '', newClassName, { error: 'Mã lớp đã tồn tại', code: newClassCode });
       } else {
         toast.error('Không thể tạo lớp: ' + error.message);
+        logClassAction('CREATE_FAILED', '', newClassName, { error: error.message, code: newClassCode });
       }
       setIsCreating(false);
       return;
     }
 
+    // Log successful class creation
+    logClassAction('CREATE_SUCCESS', newClass.id, newClassName, {
+      code: newClassCode,
+      schedule: newSchedule,
+      startDate: startDate ? format(startDate, 'yyyy-MM-dd') : null,
+      endDate: endDate ? format(endDate, 'yyyy-MM-dd') : null,
+      startTime,
+      endTime
+    });
+
     // Tự động tạo các buổi học nếu có ngày bắt đầu và kết thúc
     if (startDate && endDate && newClass) {
       const weeks = differenceInWeeks(endDate, startDate) + 1; // +1 để bao gồm tuần đầu
       const sessionsToCreate = [];
-      
+
       for (let i = 0; i < weeks; i++) {
         const sessionDate = addWeeks(startDate, i);
         sessionsToCreate.push({
@@ -123,16 +138,27 @@ export default function TeacherDashboard() {
           is_active: i === 0 // Chỉ buổi đầu tiên active
         });
       }
-      
+
       if (sessionsToCreate.length > 0) {
         const { error: sessionError } = await supabase
           .from('sessions')
           .insert(sessionsToCreate);
-        
+
         if (sessionError) {
           toast.error('Tạo lớp thành công nhưng không thể tạo buổi học');
+          logAction('AUTO_SESSION_CREATE_FAILED', {
+            classId: newClass.id,
+            className: newClassName,
+            sessionsCount: sessionsToCreate.length,
+            error: sessionError.message
+          });
         } else {
           toast.success(`Tạo lớp thành công với ${sessionsToCreate.length} buổi học!`);
+          logAction('AUTO_SESSION_CREATE_SUCCESS', {
+            classId: newClass.id,
+            className: newClassName,
+            sessionsCount: sessionsToCreate.length
+          });
         }
       }
     } else {
@@ -365,7 +391,10 @@ export default function TeacherDashboard() {
             <Card 
               key={cls.id} 
               className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setSelectedClass(cls)}
+              onClick={() => {
+                logClassAction('VIEW_DETAIL', cls.id, cls.name);
+                setSelectedClass(cls);
+              }}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">

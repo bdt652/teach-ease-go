@@ -16,6 +16,7 @@ const DEFAULT_CONFIG = {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json; charset=utf-8',
 };
 
 // Khởi tạo Supabase client
@@ -147,7 +148,7 @@ async function callGeminiAPIWithRotation(
   userPrompt: string, 
   maxRetries: number = 3
 ): Promise<string> {
-  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
   
   // Reset các key đã hết limit trước
   await resetLimitedKeys(supabase);
@@ -215,7 +216,7 @@ async function callGeminiAPIWithRotation(
 
 // Hàm gọi Gemini API đơn giản (fallback)
 async function callGeminiAPI(systemPrompt: string, userPrompt: string, apiKey: string) {
-  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
   
   const response = await fetch(`${API_URL}?key=${apiKey}`, {
     method: "POST",
@@ -303,6 +304,9 @@ Hãy viết nhận xét chi tiết theo đúng format 10 tiêu chí cho học si
 }
 
 serve(async (req) => {
+  // Log IP address for security monitoring
+  const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || 'unknown'
+  console.log('Generate feedback function called from IP:', clientIP)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -354,13 +358,13 @@ serve(async (req) => {
     console.log('Generated feedback successfully');
 
     return new Response(JSON.stringify({ feedback }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (error) {
     console.error("Error generating feedback:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   }
 });

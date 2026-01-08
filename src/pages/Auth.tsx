@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useLogger } from '@/hooks/useLogger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +18,7 @@ const loginSchema = z.object({
 export default function Auth() {
   const navigate = useNavigate();
   const { signIn, user, loading } = useAuth();
+  const { logNavigation } = useLogger();
   const [isLoading, setIsLoading] = useState(false);
   
   const [email, setEmail] = useState('');
@@ -25,9 +27,10 @@ export default function Auth() {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
+      logNavigation('/auth', '/dashboard');
       navigate('/dashboard');
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, logNavigation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,17 +117,23 @@ export default function Auth() {
         </Card>
 
         <div className="mt-6 space-y-3">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="w-full"
-            onClick={() => navigate('/guest')}
+            onClick={() => {
+              logNavigation('/auth', '/guest');
+              navigate('/guest');
+            }}
           >
             Nộp bài với tư cách khách (không cần tài khoản)
           </Button>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full"
-            onClick={() => navigate('/')}
+            onClick={() => {
+              logNavigation('/auth', '/');
+              navigate('/');
+            }}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Về trang chủ

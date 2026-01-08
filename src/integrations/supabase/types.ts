@@ -376,6 +376,39 @@ export type Database = {
         Args: { _class_id: string; _user_id: string }
         Returns: boolean
       }
+      get_class_statistics: {
+        Args: { teacher_id_filter?: string | null }
+        Returns: {
+          class_id: string
+          class_name: string
+          class_code: string
+          student_count: number
+          session_count: number
+          submission_count: number
+          average_grade: number | null
+        }[]
+      }
+      get_user_growth_stats: {
+        Args: { days_back?: number }
+        Returns: {
+          date: string
+          new_users: number
+        }[]
+      }
+      get_submission_trends: {
+        Args: { days_back?: number }
+        Returns: {
+          date: string
+          submission_count: number
+        }[]
+      }
+      get_grade_distribution: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          grade_range: string
+          count: number
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "teacher" | "student"

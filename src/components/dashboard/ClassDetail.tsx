@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useLogger } from '@/hooks/useLogger';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,6 +68,7 @@ interface ClassDetailProps {
 
 export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassDetailProps) {
   const { user } = useAuth();
+  const { logClassAction, logSessionAction, logAction } = useLogger();
   const [currentClass, setCurrentClass] = useState<Class>(classData);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,8 +202,13 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     
     if (error) {
       toast.error('Không thể tạo buổi học: ' + error.message);
+      logSessionAction('CREATE_FAILED', '', newSessionTitle, classData.id, { error: error.message });
     } else {
       toast.success('Tạo buổi học thành công!');
+      logSessionAction('CREATE_SUCCESS', '', newSessionTitle, classData.id, {
+        order: nextOrder,
+        hasContent: !!newSessionContent
+      });
       setNewSessionTitle('');
       setNewSessionContent('');
       setIsCreateOpen(false);
@@ -245,12 +252,26 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     if (error) {
       if (error.code === '23505') {
         toast.error('Mã lớp đã tồn tại');
+        logClassAction('UPDATE_FAILED', currentClass.id, editName, { error: 'Mã lớp đã tồn tại', code: editCode });
       } else {
         toast.error('Không thể cập nhật: ' + error.message);
+        logClassAction('UPDATE_FAILED', currentClass.id, editName, { error: error.message });
       }
     } else if (data) {
       setCurrentClass(data);
       toast.success('Cập nhật lớp học thành công!');
+      logClassAction('UPDATE_SUCCESS', currentClass.id, editName, {
+        oldCode: currentClass.code,
+        newCode: editCode,
+        oldName: currentClass.name,
+        newName: editName,
+        scheduleChanged: editSchedule !== (currentClass.schedule_info || ''),
+        dateChanged: (editStartDate ? format(editStartDate, 'yyyy-MM-dd') : null) !== currentClass.start_date ||
+                     (editEndDate ? format(editEndDate, 'yyyy-MM-dd') : null) !== currentClass.end_date,
+        timeChanged: editStartTime !== (currentClass.start_time?.substring(0, 5) || '') ||
+                     editEndTime !== (currentClass.end_time?.substring(0, 5) || ''),
+        passwordChanged: editGuestPassword !== (currentClass.guest_password || '')
+      });
       setIsEditOpen(false);
       onClassUpdate?.();
     }
@@ -263,10 +284,18 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
       .from('sessions')
       .update({ is_active: !session.is_active })
       .eq('id', session.id);
-    
+
     if (error) {
       toast.error('Không thể cập nhật trạng thái');
+      logSessionAction('TOGGLE_ACTIVE_FAILED', session.id, session.title, currentClass.id, {
+        error: error.message,
+        targetState: !session.is_active
+      });
     } else {
+      logSessionAction('TOGGLE_ACTIVE_SUCCESS', session.id, session.title, currentClass.id, {
+        oldState: session.is_active,
+        newState: !session.is_active
+      });
       fetchSessions();
     }
   };
@@ -304,8 +333,19 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
     
     if (error) {
       toast.error('Không thể cập nhật buổi học');
+      logSessionAction('UPDATE_FAILED', editingSession.id, editSessionTitle, currentClass.id, {
+        error: error.message
+      });
     } else {
       toast.success('Cập nhật buổi học thành công!');
+      logSessionAction('UPDATE_SUCCESS', editingSession.id, editSessionTitle, currentClass.id, {
+        oldTitle: editingSession.title,
+        newTitle: editSessionTitle,
+        contentChanged: editSessionContent !== (editingSession.content || ''),
+        submissionTypeChanged: editSubmissionType !== (editingSession.submission_type || 'any'),
+        instructionsChanged: editSubmissionInstructions !== (editingSession.submission_instructions || ''),
+        extensionsChanged: editAllowedExtensions !== (editingSession.allowed_extensions?.join(', ') || '')
+      });
       setEditingSession(null);
       fetchSessions();
     }
@@ -315,16 +355,22 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
 
   const deleteSession = async (sessionId: string) => {
     if (!confirm('Bạn có chắc muốn xóa buổi học này?')) return;
-    
+
+    const session = sessions.find(s => s.id === sessionId);
+
     const { error } = await supabase
       .from('sessions')
       .delete()
       .eq('id', sessionId);
-    
+
     if (error) {
       toast.error('Không thể xóa buổi học');
+      logSessionAction('DELETE_FAILED', sessionId, session?.title || 'Unknown', currentClass.id, {
+        error: error.message
+      });
     } else {
       toast.success('Đã xóa buổi học');
+      logSessionAction('DELETE_SUCCESS', sessionId, session?.title || 'Unknown', currentClass.id);
       fetchSessions();
     }
   };
@@ -782,7 +828,10 @@ export default function ClassDetail({ classData, onBack, onClassUpdate }: ClassD
                   key={session.id}
                   session={session}
                   sessionDate={getSessionDate(session.session_order)}
-                  onSelect={() => setSelectedSession(session)}
+                  onSelect={() => {
+                    logSessionAction('VIEW_DETAIL', session.id, session.title, currentClass.id);
+                    setSelectedSession(session);
+                  }}
                   onToggleActive={() => toggleSessionActive(session)}
                   onEdit={() => openEditSession(session)}
                   onPostpone={() => postponeSession(session)}

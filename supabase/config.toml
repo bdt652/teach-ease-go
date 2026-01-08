@@ -1,7 +1,10 @@
-project_id = "fwqccwahklpdfuwsumho"
+project_id = "default"
 
 [functions.create-user]
 verify_jwt = false
 
 [functions.generate-student-feedback]
+verify_jwt = false
+
+[functions.update-user-password]
 verify_jwt = false

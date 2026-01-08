@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useLogger } from '@/hooks/useLogger';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LogOut, BookOpen, Users, GraduationCap, Shield } from 'lucide-react';
+import { LogOut, BookOpen, Users, GraduationCap, Shield, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import TeacherDashboard from '@/components/dashboard/TeacherDashboard';
 import StudentDashboard from '@/components/dashboard/StudentDashboard';
@@ -13,6 +14,7 @@ import StudentDashboard from '@/components/dashboard/StudentDashboard';
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, loading, signOut, hasRole, roles } = useAuth();
+  const { logNavigation } = useLogger();
   const [profile, setProfile] = useState<{ full_name: string } | null>(null);
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export default function Dashboard() {
   const handleSignOut = async () => {
     await signOut();
     toast.success('Đã đăng xuất');
+    logNavigation('/dashboard', '/');
     navigate('/');
   };
 
@@ -87,10 +90,22 @@ export default function Dashboard() {
                 Vai trò: {roles.map(r => r === 'teacher' ? 'Giáo viên' : r === 'student' ? 'Học sinh' : 'Admin').join(', ')}
               </div>
             )}
+            {(isAdmin || isTeacher) && (
+              <Button variant="outline" size="sm" onClick={() => {
+                logNavigation('/dashboard', '/analytics');
+                navigate('/analytics');
+              }}>
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Thống kê
+              </Button>
+            )}
             {isAdmin && (
-              <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
+              <Button variant="outline" size="sm" onClick={() => {
+                logNavigation('/dashboard', '/admin');
+                navigate('/admin');
+              }}>
                 <Shield className="h-4 w-4 mr-2" />
-                Quản lý Users
+                Admin
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleSignOut}>

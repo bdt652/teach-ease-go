@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 type AppRole = 'admin' | 'teacher' | 'student';
 
@@ -40,7 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
+        // Log auth state changes
+        if (event === 'SIGNED_IN' && session?.user) {
+          logger.logAuth('login', { email: session.user.email, auto: true }, true);
+        } else if (event === 'SIGNED_OUT') {
+          logger.logAuth('logout', { auto: true }, true);
+        }
+
         // Defer role fetching with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
@@ -68,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -79,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     });
-    
+
+    logger.logAuth('signup', { email, fullName }, error ? false : true);
+
     return { error: error as Error | null };
   };
 
@@ -88,11 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password
     });
-    
+
+    logger.logAuth('login', { email }, error ? false : true);
+
     return { error: error as Error | null };
   };
 
   const signOut = async () => {
+    logger.logAuth('logout', {}, true);
     await supabase.auth.signOut();
     setRoles([]);
   };
